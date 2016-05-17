@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# Written by Mohammad Razavi <mrazavi64 at gmail dot com>
+#
+# Usage: kayna-docker-update-image [-e] [image-name]
+#
+# Default image-name is kayna:latest
+#
+# Options:
+#  -h, --help            show this help message and exit
+#  -e                    open an editor to edit the Dockerfile before building
+#                        the image
+
+# Usage func :
+([ "$1" = "--help" ] || [ "$1" = "-h" ]) && { sed -n -e '/^# Usage:/,/^$/ s/^# \?//p' < $0; exit; }
+
+prompt_confirm() {
+    while true; do
+	read -r -p "${1:-Continue?} [Y/n]: " REPLY
+	case $REPLY in
+	    "") return 0 ;;
+	    [yY]) return 0 ;;
+	    [nN]) return 1 ;;
+	    *) printf " \033[31m %s \n\033[0m" "invalid input"
+	esac 
+    done  
+}
+
+build_dir=$(mktemp -d) # --tmpdir=/var/cache/kayna/
+[ ! -d "$build_dir" ] && echo "Coudn't create temporary directory." && exit 1
+cp -r -H /usr/share/kayna/docker/* "$build_dir"
+
+if echo "" "$@" | grep -qP '(?<!\S)-e'; then
+    [ -z "$EDITOR" ] && EDITOR="$VISUAL"
+    [ -z "$EDITOR" ] && { EDITOR=$(which sensible-EDITOR) || EDITOR=$(which nano) || EDITOR=$(which emacs) || EDITOR=$(which vim) || EDITOR=$(which vim.tiny)  || EDITOR=$(which vi); }
+    [ -z "$EDITOR" ]  && echo "Coudn't find a suitable editor." && exit 1
+    $EDITOR "$build_dir/Dockerfile"
+    prompt_confirm || exit $?
+fi
+
+image_name="kayna:latest"
+for i in "$@"; do
+    ! echo "" "$i" | grep -q "^\s*-" && image_name="$i" && break
+done
+
+(cd "$build_dir" && exec docker build -t "$image_name" .)
+
+rm -rf $build_dir

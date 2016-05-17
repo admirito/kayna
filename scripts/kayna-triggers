@@ -1,0 +1,207 @@
+#!/usr/bin/env python
+#
+# Written by Mohammad Razavi <mrazavi64 at gmail dot com>
+#
+
+import sys
+import os
+import re
+import json
+import optparse
+import urlparse
+import urllib
+import urllib2
+import ssl
+import BaseHTTPServer
+
+def call_trigger(project, target_branch, ref):
+    global TRIGGERS_CONF_FILE
+
+    token = url = None
+
+    with open(TRIGGERS_CONF_FILE) as fp:
+        for line in fp:
+            parts = line.split()
+            if len(parts) == 4 and not parts[0].startswith("#"):
+                if (project, target_branch) == tuple(parts[:2]):
+                    token, url = parts[2:4]
+
+    if not token or not url:
+        msg = "URL/TOKEN not found in %s for (%s, %s)" % \
+              (TRIGGERS_CONF_FILE, project, target_branch)
+        sys.stderr.write("%s\n" % msg)
+        raise Exception(msg)
+
+    data = urllib.urlencode({"token": token, "ref": ref})
+    result = urllib2.urlopen(url, data)
+    if 200 <= result.getcode() < 300 :
+        try:
+            error = result.read()
+        except Exception:
+            pass
+        msg = "Gitlab status code was %d: %s" % (result.getcode(), error)
+        sys.stderr.write("%s\n" % msg)
+        raise Exception(msg)
+    else:
+        sys.stderr.write("Gitlab status code was %d%s\n" % result.getcode())
+
+def authentication(do_SPAM_func):
+    def new_func(self):
+        if self.api_key:
+            match = re.match(r"/([^/]*)(/.*)", self.path)
+            if not match or match.group(1) != self.api_key:
+                self.send_response(403)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                result = {"ok": 0, "error": "Invalid API key."}
+                self.wfile.write(json.dumps(result))
+                return
+
+            path = match.group(2)
+
+            url = urlparse.urlparse(path)
+            self.path = url.path
+            self.query = urlparse.parse_qs(url.query)
+
+        do_SPAM_func(self)
+
+    return new_func
+
+class KaynaHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+    api_key = ""
+
+    @authentication
+    def do_POST(self):
+        if self.path not in  ["", "/"]:
+            self.send_response(response_code)
+            self.end_headers()
+            return
+
+        if self.headers.get("Content-Type") != "application/json":
+            sys.stderr.write("Warning: Expect application/json content-type." \
+                             " Found '%s'.\n" % \
+                             self.headers.get("Content-Type"))
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        data = self.rfile.read(content_length)
+        data = json.loads(data)
+
+        object_kind = data.get("object_kind") # push | tag_push| issue |
+                                              # note | merge_request
+        if object_kind != "merge_request":
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        project = data.get("project", {})
+        project_name = project.get("name")
+        project_path = project.get("path_with_namespace") # group/project-name
+
+        object_attributes = data.get("object_attributes", {})
+        state = object_attributes.get("state") # opened | merged
+        merge_status = object_attributes.get("merge_status") # unchecked |
+                                                             # can_be_merged
+        wip = object_attributes.get("work_in_progress") # boolean type
+
+        source_branch = object_attributes.get("source_branch")
+        target_branch = object_attributes.get("target_branch")
+        target_project_id = object_attributes.get("target_project_id")
+        target_project_name = object_attributes.get("target", {}).get("name")
+        target_project_path = object_attributes.get("target", {}) \
+                                               .get("path_with_namespace")
+        last_commit_id = object_attributes.get("last_commit", {}).get("id")
+
+        result = {}
+        response_code = 200
+        if state == "opened" and not wip:
+            try:
+                call_trigger(project = target_project_path,
+                             target_branch = target_branch,
+                             ref = last_commit_id) # ref could also be
+                                                   # source_branch
+            except Exception as e:
+                response_code = 500
+                result["message"] = str(e)
+            else:
+                result["message"] = "Gitlab called."
+        else:
+            result["message"] = "Nothing done."
+
+        self.send_response(response_code)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(result))
+
+if __name__ == '__main__':
+    parser = optparse.OptionParser()
+    parser.add_option("-t", "--triggers-config",
+                      dest = "triggers_config",
+                      type = "string", default = "gitlab-triggers.conf",
+                      help = "Set gitlab triggers config file path to FILE",
+                      metavar = "FILE")
+    parser.add_option("-k", "--key",
+                      dest = "api_key",
+                      type = "string", default = "",
+                      help = "set API key to STRING_OR_FILE. If it starts "
+                             "with a preceding / it should be file "
+                             "containing the key",
+                      metavar = "STRING_OR_FILE")
+    parser.add_option("-b", "--bind-host",
+                      dest = "bind_host",
+                      type = "string", default = "",
+                      help = "bind the listening socket to ADDRESS",
+                      metavar = "ADDRESS")
+    parser.add_option("-p", "--port",
+                      dest = "port",
+                      type = "int", default = 4442,
+                      help = "listen to port NUMBER",
+                      metavar = "NUMBER")
+    parser.add_option("-c", "--certificate",
+                      dest = "certificate",
+                      type = "string", default = "kayna-host-agent.pem",
+                      help = "read the private key/certificate from the "
+                             "pem FILE",
+                      metavar = "FILE")
+    parser.add_option("-s", "--https",
+                      dest = "https",
+                      action = "store_true", default = False,
+                      help = "In combination with -c, use https instead of "
+                      "http",
+                      metavar = "FILE")
+
+    parser.set_usage("%s [OPTION]...\n\n" \
+                     "The triggers configuration file, specified with -t \n"
+                     "is a text file, in which each row has four columns "
+                     "(seperated with spaces):\n" \
+                     "project group/name, target-branch, trigger token, "
+                     "and trigger url.\n" % sys.argv[0])
+    options, args = parser.parse_args()
+
+    api_key = options.api_key
+    if api_key.startswith("/"):
+        with open(api_key) as fp:
+            api_key = fp.read(api_key)
+
+    TRIGGERS_CONF_FILE = options.triggers_config
+    if not os.path.isfile(TRIGGERS_CONF_FILE):
+        sys.stderr.write("File %s not found. You can specify a different " \
+                         "path with -t option.\n" % TRIGGERS_CONF_FILE)
+        exit(1)
+
+    server_address = (options.bind_host, options.port)
+    certfile = options.certificate
+
+    KaynaHandler.api_key = api_key
+
+    httpd = BaseHTTPServer.HTTPServer(server_address, KaynaHandler)
+    if options.https:
+        httpd.socket = ssl.wrap_socket(httpd.socket, certfile = certfile,
+                                       server_side = True)
+    print "Serving on %s : %s ..." % httpd.socket.getsockname()
+
+    parser = optparse.OptionParser()
+
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        httpd.shutdown()

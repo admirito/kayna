@@ -1,0 +1,2 @@
+scripts/kayna-triggers usr/bin/
+etc/gitlab-triggers.conf etc/kayna/

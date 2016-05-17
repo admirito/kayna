@@ -1,0 +1,10 @@
+[Unit]
+Description=Kayna Triggers of GitLab
+
+[Service]
+ExecStart=/usr/bin/kayna-triggers -t /etc/kayna/gitlab-triggers.conf
+User=kayna
+Group=kayna
+
+[Install]
+WantedBy=multi-user.target

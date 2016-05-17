@@ -1,0 +1,7 @@
+[eldorado]
+method			= rsync
+fqdn			= eldorado
+login			= kaynaci
+allow_dcut		= 1
+incoming		= /srv/reprepro/incoming
+post_upload_command     = curl http://eldorado/cgi-bin/follow-the-golden-eagle

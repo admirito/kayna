@@ -1,0 +1,3 @@
+var/lib/kayna/kayna-host-agent.pem usr/share/kayna/docker/kayna-host-agent.pem
+var/lib/kayna/id_rsa.pub usr/share/kayna/docker/id_rsa.pub
+var/lib/kayna/id_rsa usr/share/kayna/docker/id_rsa

@@ -1,0 +1,272 @@
+#!/bin/bash
+set -e
+
+# this will keep the status code of <command> when we add
+# "pipeline tee ..." at its end. the alternative is
+# <command> | tee out.txt ; test ${PIPESTATUS[0]} -eq 0
+set -o pipefail
+
+curl() # fix curl in Ubuntu xenial
+{
+    /usr/bin/curl "$@" || [ "$?" = "56" ]
+}
+
+git_head_comment()
+{
+    git log --format=%B -n 1 | cat
+}
+
+git_head_abbreviated_hash()
+{
+    [ -n "$CI_BUILD_REF" ] && echo "$CI_BUILD_REF" | awk  '{ print substr($0, 1, 7); }' || git log --format=%h -n 1 | cat
+}
+
+project_name()
+{
+    git remote -v | head -n1 | awk '{print $2}' | sed -e 's|.*:\(.*/\)\?||' -e 's|\.git$||'
+}
+
+project_unique_id()
+{
+    [ -n "$CI_PROJECT_ID" ] && echo "$CI_PROJECT_ID" || git remote -v | head -n 1 | awk '{ print $2 }'
+}
+
+debian_version()
+{
+    dpkg-parsechangelog --show-field Version
+}
+
+debian_source_name()
+{
+    dpkg-parsechangelog --show-field Source
+}
+
+debian_distribution()
+{
+    dpkg-parsechangelog --show-field Distribution
+}
+
+debian_changes_files()
+{
+    local changes_file="${1}"
+    sed -n '/^Files:\s*$/,/^\s*$/p' "$changes_file" | sed -e '1d' | awk '{ print $5 }'
+}
+
+remove_color()
+{
+    # Adapted from:
+    # http://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed
+    sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g" "$@"
+}
+
+url_encode()
+{
+    # Adapted from:
+    # http://stackoverflow.com/questions/296536/how-to-urlencode-data-for-curl-command
+    local string="${1}"
+    local strlen=${#string}
+    local encoded=""
+    local pos c o
+
+    for (( pos=0 ; pos<strlen ; pos++ )); do
+	c=${string:$pos:1}
+	case "$c" in
+	    [-_.~a-zA-Z0-9] ) o="${c}" ;;
+	    * )               printf -v o '%%%02x' "'$c"
+	esac
+	encoded+="${o}"
+    done
+    echo "${encoded}"
+}
+
+case "$1" in
+    build-dep)
+        printf "You have to follow the Golde Eaglen to satisfy your build dependencies.\n\n" | tee -a KAYNA-LOG
+        if ! mk-build-deps -irt "apt-get --no-install-recommends -y --force-yes" debian/control | tee -a KAYNA-LOG; then
+            printf "\n==========\nOops\x21 Something bad happened\x21\nTo find El-Dorado you shall pass Catan.\nYou have to fight the barbarians to save the island.\nFollow the golden eagle to fix the problem and reach El Hombre Dorado.\nOr simpler, ask the right one.\nWho has created the whole Catan, El-Dorado and even Kayna herself?\nDidn't you still believe?\nIf yes, just send your prayers to mrazavi64 at gmail dot com.\n" | tee -a KAYNA-LOG
+            exit 1
+        fi
+    ;;
+
+    docker-commit)
+	CONTAINER_ID="$2"
+	IMAGE_NAME="$3"
+	printf "Kayna uses her agent to commit the docker container $CONTAINER_ID to $IMAGE_NAME\n" | tee -a KAYNA-LOG
+	curl -w\\n -q -k "https://172.17.0.1:4443/eldorado/docker/commit?container=$CONTAINER_ID&image=$IMAGE_NAME" | tee -a KAYNA-LOG
+    ;;
+
+    docker-rmi)
+	IMAGE_NAME="$2"
+	printf "Kayna uses her agent to remove the docker image $IMAGE_NAME\n" | tee -a KAYNA-LOG
+	curl -w\\n -q -k "https://172.17.0.1:4443/eldorado/docker/rmi?image=$IMAGE_NAME" | tee -a KAYNA-LOG
+    ;;
+
+    clean)
+        printf "Can't you clean up after yourself and don't ask a princess?\n" | tee -a KAYNA-LOG
+        debclean | tee -a KAYNA-LOG
+    ;;
+
+    build)
+        printf "Princess Kayna will command to build your package.\n" | tee -a KAYNA-LOG
+        DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -uc -us -nc --target build | tee -a KAYNA-LOG
+    ;;
+
+    test)
+        if [ -f debian/*.debhelper.log ]; then
+            if grep -q "^\s*dh_auto_build" debian/*.debhelper.log; then
+                dpkg-buildpackage -uc -us -nc --target build | tee -a >(grep "^\s*dh_auto_test" -A100000 > KAYNA-LOG)
+            else
+                printf "Error: Kayna couldn't find dh_auto_build in the debian/*.debhelper.log file.\nDid you build the package before calling test?\n" | tee -a KAYNA-LOG
+                exit 1
+            fi
+        else
+            printf "Error: Kayna couldn't find the debian/*.debhelper.log file.\nDid you build the package before calling test?\nAre you using debhelper at all?\n" | tee -a KAYNA-LOG
+            exit 1
+        fi
+    ;;
+   
+    debuild)
+	if git_head_comment | grep -q "#version:\S\+"; then
+	    UPDATE_VERSION=$(git_head_comment | sed 's/.*\(#ver:\(\S\+\)\).*/\2/')
+	else
+	    [ "$2" != "triggered" ] && UPDATE_VERSION="$2"
+	    UPDATE_VERSION=$(echo $UPDATE_VERSION | sed 's/^version-//')
+	fi
+
+	if git_head_comment | grep -q "#dist:\S\+"; then
+	    NEW_DIST=$(git_head_comment | sed 's/.*\(#dist:\(\S\+\)\).*/\2/')
+	else
+	    NEW_DIST="$3"
+	fi
+
+	if [ -z "$NEW_DIST" ]; then
+	    if [ "$2" = "triggered" ]; then
+		[ -n "$DISTRIBUTION" ] && NEW_DIST="$DISTRIBUTION-unstable" || NEW_DIST="unstable"
+	    elif echo "$2" | grep -q "^version-"; then
+		[ -n "$DISTRIBUTION" ] && NEW_DIST="$DISTRIBUTION-testing" || NEW_DIST="testing"
+	    fi
+	fi
+
+	if [ -n "$NEW_DIST" ]; then
+	    sed -i "1 s/\(\(\S\+\s\+\)\{2\}\)\S\+;/\1$NEW_DIST;/" debian/changelog
+	    echo "Kayna set the debian/changelog distribution to $NEW_DIST" | tee -a KAYNA-LOG
+	fi
+
+	if [ -z "$UPDATE_VERSION" ] && debian_distribution | grep -q "^unstable$\|^.\+-unstable$" ||
+	   git_head_comment | grep -q "#version++"; then
+	    UPDATE_VERSION="+"
+	fi
+
+	if [ -z "$UPDATE_VERSION" ]; then
+	    echo "Kayna will not modify the debian/changelog version number." | tee -a KAYNA-LOG
+	elif [ "$UPDATE_VERSION" = "=" ]; then
+	    echo "Kayna will keep the debian/changelog version number." | tee -a KAYNA-LOG
+	elif [ "$UPDATE_VERSION" = "+" ]; then
+	    echo "Finding a new version for $(project_name) (id=$(project_unique_id)) $(debian_version) ..." | tee -a KAYNA-LOG
+	    ID=$(url_encode $(project_unique_id))
+	    PREFIX=$(url_encode $(debian_version))
+	    if ! POSTFIX=$(curl -q -f -H "Accept: text/plain" -k "https://172.17.0.1:4443/eldorado/version-db/increment?id=$ID&prefix=$PREFIX") || ! echo "$POSTFIX" | grep -q "^[[:digit:]]\+$"; then
+		echo "Kayna couldn't communicate with her agent on the host server to find a " | tee -a KAYNA-LOG
+		echo "new version. She has to generate it on her own!" | tee -a KAYNA-LOG
+		POSTFIX="$(date +%Y%m%d%H%M%S)"
+	    fi
+
+	    POSTFIX="$POSTFIX-$(git_head_abbreviated_hash)"
+
+	    NEW_VERSION="$(debian_version)~$POSTFIX"
+	    sed -i "1 s/\(\S\+\s\+\)\S\+/\1($NEW_VERSION)/" debian/changelog
+	    echo "debian changelog version modified to version $NEW_VERSION" | tee -a KAYNA-LOG
+	else
+	    echo "Modify debian version to '$UPDATE_VERSION'" | tee -a KAYNA-LOG
+	    sed -i "1 s/\(\S\+\s\+\)\S\+/\1($UPDATE_VERSION)/" debian/changelog
+	fi
+	
+	if git_head_comment | grep -q "#notest\|#nocheck"; then
+            DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -b -uc -us -nc | tee -a KAYNA-LOG
+	else
+            dpkg-buildpackage -b -uc -us -nc | tee -a KAYNA-LOG
+	fi
+
+	SOURCE_PREFIX="$(debian_source_name)_$(debian_version)"
+
+	# According to the dpkg-buildpackage man page, -nc implies -b.
+	# Also, creating a source package with -nc may add extra stuff
+	# to the source package
+	echo "Kayna will now create a source package..." | tee -a KAYNA-LOG
+	cp debian/files ../KAYNA-debian-files.backup
+	dpkg-buildpackage -S -uc -us -tc | tee -a KAYNA-LOG
+	rm -f ../$SOURCE_PREFIX*source.changes
+
+	echo "Kayna will now update the .changes files..." | tee -a KAYNA-LOG
+	mv ../KAYNA-debian-files.backup debian/files
+	dpkg-genchanges > ../$SOURCE_PREFIX*.changes
+	rm -f debian/files
+
+	mkdir -p ELDORADO
+	for file in $(debian_changes_files ../$SOURCE_PREFIX*.changes); do
+	    mv "../$file" ELDORADO/
+	done
+	find .. -maxdepth 1 -type f -a -name "$SOURCE_PREFIX*" -exec mv {} ELDORADO \;
+
+	if ! git_head_comment | grep -q "#fast"; then
+	    if test -n "$(find ELDORADO -maxdepth 1 -name '*.changes' -print -quit)"; then
+		echo "Kayna will now analyse the output deb file(s) with lintian" | tee -a KAYNA-LOG
+		if lintian --allow-root --color=always -iI ELDORADO/*.changes | tee -a KAYNA-LOG | tee LINTIAN-errors; then
+		    if grep -q "^W:" LINTIAN-errors; then
+			remove_color LINTIAN-errors > LINTIAN-warnings
+			printf "\nNo errors, although Kayna thinks you have to work on the mentioned warnings.\n" | tee -a KAYNA-LOG | tee -a LINTIAN-warnings
+		    elif grep -q "\S" LINTIAN-errors; then
+			remove_color LINTIAN-errors > LINTIAN-is-almost-clean
+			printf "\nWell done. No errors and no warnings.\nJust a few notes to keep your package even better!\n" | tee -a KAYNA-LOG | tee -a LINTIAN-is-almost-clean
+		    else
+			echo "Hooray! No lintian errors, warnings, or notes." | tee -a KAYNA-LOG | tee LINTIAN-is-clean
+		    fi
+		    rm -f LINTIAN-errors
+		else
+		    remove_color -i LINTIAN-errors
+		    if git_head_comment | grep -q "#lintian"; then
+			echo "#lintian is set, but you don't have a clean lintian log." | tee -a KAYNA-LOG
+			echo "You have to work on your lintan errors." | tee -a KAYNA-LOG
+			exit 1
+		    else
+			echo "Kayna is worried about your lintian errors." | tee -a KAYNA-LOG
+			echo "Is it so hard to resolve it?" | tee -a KAYNA-LOG
+			echo "I let you escape this time just because you didn't mention #lintian" | tee -a KAYNA-LOG
+			echo "in your git comment, although it is yet another inconsideration!" | tee -a KAYNA-LOG
+		    fi
+		fi
+		remove_color -i KAYNA-LOG
+	    else
+		echo "Oops! Where is the .changes file?!" | tee -a KAYNA-LOG
+	    fi
+	else
+	    echo "It seems that you are in a hurry." | tee -a KAYNA-LOG
+	    echo "Kayna lets you skip running the lintian for now." | tee -a KAYNA-LOG
+	    echo "Please be more cautious next time." | tee -a KAYNA-LOG
+	fi
+    ;;
+
+    upload)
+	if debian_distribution | grep -q "^UNRELEASED$\|^.\+-UNRELEASED$"; then
+	    [ "$2" = "-f" ] && echo "Cannot upload UNRELEASED distribution." | tee -a KAYNA-LOG  && exit 1
+	    echo "Skip uploading UNRELEASED distribution." | tee -a KAYNA-LOG
+	else
+            dput -u eldorado ELDORADO/*.changes | tee -a KAYNA-LOG
+	fi
+    ;;
+
+    deploy)
+        echo "TODO: Kayna will deploy the debian packages." | tee -a KAYNA-LOG
+    ;;
+
+    diagnose)
+        echo "TODO: Kayna will diagnose the problem for you." | tee -a KAYNA-LOG
+    ;;
+
+    *)
+        echo "Invalid argument: $1" >&2
+        exit 1
+    ;;
+esac
+
+exit 0

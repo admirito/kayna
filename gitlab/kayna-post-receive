@@ -1,0 +1,38 @@
+#!/bin/bash
+
+#
+# Written by Mohammad Razavi <mrazavi64 at gmail dot com>
+#
+
+# Please do not edit this line:
+# KAYNA-GITLAB-PLUGIN-IDENTIFIER
+
+GITLAB_POST_RECEIVE=/opt/gitlab/embedded/service/gitlab-shell/hooks/gitlab-post-receive
+PIPE=$(mktemp)
+
+while read oldrev newrev refname; do
+    echo $oldrev $newrev $refname >>$PIPE
+
+    if ! echo "$newrev" | grep -q "0\{40\}" &&        # skip deletes
+	! echo "$refname" | grep -q "^refs/tags/" &&  # skip tags
+	[ -n "$newrev" ]; then
+	if diff <(git show $oldrev:debian/changelog 2>/dev/null | head -n1) <(git show $newrev:debian/changelog 2>/dev/null | head -n1) | grep -q "^> \S\+\s\+(\S\+)\s\+\(testing\|\S\+-testing\);"; then
+	    VERSION=$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Version)
+	    if git tag -am "$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Changes | sed '1d')" "version-$VERSION" $newrev 2>/dev/null; then
+		echo "* Kayna added a new tag: version-$VERSION"
+		echo "* Use the 'git pull' command to fetch the new tags"
+
+		echo $oldrev $newrev refs/tags/version-$VERSION >>$PIPE
+	    fi
+	fi
+	DISTRIBUTION=$(git show $newrev:debian/changelog 2>/dev/null | dpkg-parsechangelog -l- --show-field Distribution 2>/dev/null | sed 's/^.*-//')
+	[ -n "$DISTRIBUTION" ] && echo $oldrev $newrev refs/tags/kayna/dist/$DISTRIBUTION >>$PIPE
+    fi
+done
+
+cat $PIPE | $GITLAB_POST_RECEIVE
+EXITCODE=$?
+
+rm -f $PIPE
+
+exit $EXITCODE

@@ -1,0 +1,13 @@
+[Unit]
+Description=Kayna Host Agent
+After=docker.service
+Requires=docker.service
+
+[Service]
+ExecStart=/usr/bin/kayna-host-agent -b 172.17.0.1 -p 4443 -k eldorado -x kayna- -c /var/lib/kayna/kayna-host-agent.pem
+User=kayna
+Group=kayna
+
+[Install]
+WantedBy=multi-user.target
+

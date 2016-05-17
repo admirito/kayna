@@ -1,0 +1,2 @@
+docker/* usr/share/kayna/docker
+scripts/kayna-docker-update-image usr/bin/

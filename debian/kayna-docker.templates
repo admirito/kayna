@@ -1,0 +1,7 @@
+Template: kayna-docker/debian_mirror
+Type: string
+Default: archive.ubuntu.com
+Description: Enter Ubuntu mirror host:
+ It is recommended to have a local ubuntu mirror, so you can have fast access
+ to download package build dependencies in the docker container. If you have
+ such a mirror, please specify its host.

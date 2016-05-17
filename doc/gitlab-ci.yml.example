@@ -1,0 +1,120 @@
+image: kayna:latest
+
+variables:
+  DISTRIBUTION: xenial
+
+stages:
+  - init
+  - build
+  - test
+  - debuild
+  - upload
+  - deploy
+  - all_in_one
+  - diagnose
+  - cleanup
+
+init_job:
+  stage: init
+  only:
+    - /^version-.+/
+    - triggers
+  script:
+    - kayna build-dep
+    - CONTAINER_ID=$(awk -F'[:/]' '(($4 == "docker") && (lastId != $NF)) { lastId = $NF; print $NF; }' /proc/self/cgroup)
+    - kayna docker-commit "$CONTAINER_ID" "$CI_BUILD_REF"
+  artifacts:
+    paths:
+      - KAYNA-LOG
+
+build_job:
+  image: "kayna-$CI_BUILD_REF"
+  stage: build
+  only:
+    - /^version-.+/
+    - triggers
+  script:
+    - rm -f KAYNA-LOG
+    - kayna build
+  artifacts:
+    untracked: true
+
+test_job:
+  image: "kayna-$CI_BUILD_REF"
+  stage: test
+  only:
+    - /^version-.+/
+    - triggers
+  script:
+    - rm -f KAYNA-LOG
+    - kayna test
+  artifacts:
+    paths:
+      - debian/*.debhelper.log
+      - KAYNA-LOG
+
+debuild_job:
+  image: "kayna-$CI_BUILD_REF"
+  stage: debuild
+  only:
+    - /^version-.+/
+    - triggers
+  script:
+    - rm -f KAYNA-LOG
+    - '[ "$CI_BUILD_TRIGGERED" = "true" ] && kayna debuild triggered || kayna debuild $CI_BUILD_TAG'
+  artifacts:
+    paths:
+      - KAYNA-LOG
+      - LINTIAN*
+      - ELDORADO/
+
+upload_job:
+  stage: upload
+  only:
+    - /^version-.+/
+    - triggers
+  script:
+    - rm -f KAYNA-LOG
+    - kayna upload
+  artifacts:
+    paths:
+      - KAYNA-LOG
+      - ELDORADO/*.upload
+
+deploy_job:
+  stage: deploy
+  only:
+    - /^version-.+/
+    - triggers
+  script:
+    - rm -f KAYNA-LOG
+    - kayna deploy
+
+all_in_one_job:
+  stage: all_in_one
+  only:
+    - /kayna/dist/(?!testing$|.+-testing$)/
+  script:
+    - kayna build-dep
+    - kayna debuild
+    - kayna upload
+  artifacts:
+    untracked: true
+
+diagnose_job:
+  stage: diagnose
+  when: on_failure
+  script:
+    - rm -f KAYNA-LOG
+    - kayna diagnose
+  artifacts:
+    untracked: true
+
+cleanup_job:
+  stage: cleanup
+  only:
+    - /^version-.+/
+    - triggers
+  when: always
+  script:
+    - kayna docker-rmi "$CI_BUILD_REF"
