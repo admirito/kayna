@@ -113,7 +113,7 @@ case "$1" in
     ;;
 
     test)
-        if [ -f debian/*.debhelper.log ]; then
+        if [ -n "$(find debian/ -maxdepth 1 -name '*.debhelper.log' -print -quit)" ]; then
             if grep -q "^\s*dh_auto_build" debian/*.debhelper.log; then
                 dpkg-buildpackage -uc -us -nc --target build | tee -a >(grep "^\s*dh_auto_test" -A100000 > KAYNA-LOG)
             else
