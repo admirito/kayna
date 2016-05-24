@@ -212,7 +212,7 @@ case "$1" in
 	if ! git_head_comment | grep -q "#fast"; then
 	    if test -n "$(find ELDORADO -maxdepth 1 -name '*.changes' -print -quit)"; then
 		echo "Kayna will now analyse the output deb file(s) with lintian" | tee -a KAYNA-LOG
-		if lintian --allow-root --color=always -iI ELDORADO/*.changes | tee -a KAYNA-LOG | tee LINTIAN-errors; then
+		if lintian --allow-root --color=always --profile=kayna -iI ELDORADO/*.changes | tee -a KAYNA-LOG | tee LINTIAN-errors; then
 		    if grep -q "^W:" LINTIAN-errors; then
 			remove_color LINTIAN-errors > LINTIAN-warnings
 			printf "\nNo errors, although Kayna thinks you have to work on the mentioned warnings.\n" | tee -a KAYNA-LOG | tee -a LINTIAN-warnings

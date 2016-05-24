@@ -39,6 +39,15 @@ case "$1" in
 	    if [ -n "$RET" ]; then
 		sed -i "s|catan.archive.ubuntu.com|$RET|g" /usr/share/kayna/docker/Dockerfile
 	    fi
+
+	    RET=
+	    db_get kayna-docker/known_dists
+	    if [ -n "$RET" ]; then
+		printf "# List of kayna distributions\n\n" > /usr/share/kayna/docker/known-dists
+		for dist in "$RET"; do
+		    echo "$dist" >> /usr/share/kayna/docker/known-dists
+		done
+	    fi
 	fi
     ;;
 

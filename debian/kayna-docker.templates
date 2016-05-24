@@ -5,3 +5,12 @@ Description: Enter Ubuntu mirror host:
  It is recommended to have a local ubuntu mirror, so you can have fast access
  to download package build dependencies in the docker container. If you have
  such a mirror, please specify its host.
+
+Template: kayna-docker/known_dists
+Type: string
+Default: unstable testing trusty-unstable trusty-testing xenial-unstable xenial-testing
+Description: Enter known distribution names in your debian repository:
+ Kayna uses its own lintian profile to validate distribution
+ names. Please enter the possible distribution names that Kayna could
+ upload the deb files to. These names will only be used by lintian and
+ have no other effect.
