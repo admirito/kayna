@@ -172,7 +172,7 @@ case "$1" in
 		POSTFIX="$(date +%Y%m%d%H%M%S)"
 	    fi
 
-	    POSTFIX="$POSTFIX-$(git_head_abbreviated_hash)"
+	    POSTFIX="$POSTFIX.$(git_head_abbreviated_hash)"
 
 	    NEW_VERSION="$(debian_version)~$POSTFIX"
 	    sed -i "1 s/\(\S\+\s\+\)\S\+/\1($NEW_VERSION)/" debian/changelog
