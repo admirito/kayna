@@ -14,17 +14,23 @@ import urllib2
 import ssl
 import BaseHTTPServer
 
-def call_trigger(project, target_branch, ref):
-    global TRIGGERS_CONF_FILE
+def call_trigger(project, target_branch, ref, project_id = None, token = None):
+    global TRIGGERS_CONF_FILE, DEFAULT_URL
 
-    token = url = None
+    url = None
 
-    with open(TRIGGERS_CONF_FILE) as fp:
-        for line in fp:
-            parts = line.split()
-            if len(parts) == 4 and not parts[0].startswith("#"):
-                if (project, target_branch) == tuple(parts[:2]):
-                    token, url = parts[2:4]
+    try:
+        with open(TRIGGERS_CONF_FILE) as fp:
+            for line in fp:
+                parts = line.split()
+                if len(parts) == 4 and not parts[0].startswith("#"):
+                    if (project, target_branch) == tuple(parts[:2]):
+                        token, url = parts[2:4]
+    except:
+        pass
+
+    if not url and DEFAULT_URL:
+        url = DEFAULT_URL.replace("<PROJECT_ID>", str(project_id))
 
     if not token or not url:
         msg = "URL/TOKEN not found in %s for (%s, %s)" % \
@@ -58,10 +64,12 @@ def authentication(do_SPAM_func):
                 return
 
             path = match.group(2)
+        else:
+            path = self.path
 
-            url = urlparse.urlparse(path)
-            self.path = url.path
-            self.query = urlparse.parse_qs(url.query)
+        url = urlparse.urlparse(path)
+        self.path = url.path
+        self.query = urlparse.parse_qs(url.query)
 
         do_SPAM_func(self)
 
@@ -83,8 +91,12 @@ class KaynaHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                              self.headers.get("Content-Type"))
 
         content_length = int(self.headers.get("Content-Length", 0))
+        gitlab_token = self.headers.get("X-Gitlab-Token")
         data = self.rfile.read(content_length)
         data = json.loads(data)
+
+        gitlab_token = self.query.get("token", [gitlab_token])[0]
+        argument_id = self.query.get("id", [None])[0]
 
         object_kind = data.get("object_kind") # push | tag_push| issue |
                                               # note | merge_request
@@ -117,8 +129,10 @@ class KaynaHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             try:
                 call_trigger(project = target_project_path,
                              target_branch = target_branch,
-                             ref = last_commit_id) # ref could also be
+                             ref = last_commit_id, # ref could also be
                                                    # source_branch
+                             project_id = argument_id or target_project_id,
+                             token = gitlab_token)
             except Exception as e:
                 response_code = 500
                 result["message"] = str(e)
@@ -139,6 +153,13 @@ if __name__ == '__main__':
                       type = "string", default = "gitlab-triggers.conf",
                       help = "Set gitlab triggers config file path to FILE",
                       metavar = "FILE")
+    parser.add_option("-d", "--default-url",
+                      dest = "default_url",
+                      type = "string", default = "",
+                      help = "use URL for projects not mentioned in "
+                             "triggers-config. <PROJECT_ID> will be replaced"
+                             "with the real project id.",
+                      metavar = "URL")
     parser.add_option("-k", "--key",
                       dest = "api_key",
                       type = "string", default = "",
@@ -183,10 +204,30 @@ if __name__ == '__main__':
             api_key = fp.read(api_key)
 
     TRIGGERS_CONF_FILE = options.triggers_config
-    if not os.path.isfile(TRIGGERS_CONF_FILE):
-        sys.stderr.write("File %s not found. You can specify a different " \
-                         "path with -t option.\n" % TRIGGERS_CONF_FILE)
-        exit(1)
+    DEFAULT_URL = options.default_url
+    has_config = False
+
+    try:
+        with open(TRIGGERS_CONF_FILE) as fp:
+            lines = re.findall(r"^\s*([^#]\S*)\s+(\S+)\s+(\S+)\s+(\S+)\s*$",
+                               fp.read(), flags = re.MULTILINE)
+            has_config = bool(filter(lambda x: x[0] != "*" or x[1] != "*",
+                                     lines))
+            if not DEFAULT_URL:
+                defaults = filter(lambda x: x[0] == x[1] == "*", lines)
+                DEFAULT_URL = defaults[0][3] if defaults else DEFAULT_URL
+    except:
+        pass
+
+    if not has_config:
+        if DEFAULT_URL:
+            sys.stderr.write("%s doesn't have any specific configuration. "
+                             "Continue with the default URL: %s.\n" \
+                             % (TRIGGERS_CONF_FILE, DEFAULT_URL))
+        else:
+            sys.stderr.write("File %s doesn't have any configuration and "
+                             "default url is not set.\n" % TRIGGERS_CONF_FILE)
+            exit(1)
 
     server_address = (options.bind_host, options.port)
     certfile = options.certificate
