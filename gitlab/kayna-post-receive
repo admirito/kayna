@@ -17,7 +17,7 @@ while read oldrev newrev refname; do
 	! echo "$refname" | grep -q "^refs/tags/" &&  # skip tags
 	[ -n "$newrev" ]; then
 	if diff <(git show $oldrev:debian/changelog 2>/dev/null | head -n1) <(git show $newrev:debian/changelog 2>/dev/null | head -n1) | grep -q "^> \S\+\s\+(\S\+)\s\+\(testing\|\S\+-testing\);"; then
-	    VERSION=$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Version)
+	    VERSION=$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Version | sed 's/~/TILDE/g')
 	    if git tag -am "$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Changes | sed '1d')" "version-$VERSION" $newrev 2>/dev/null; then
 		echo "* Kayna added a new tag: version-$VERSION"
 		echo "* Use the 'git pull' command to fetch the new tags"

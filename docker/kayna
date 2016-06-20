@@ -131,7 +131,7 @@ case "$1" in
 	    UPDATE_VERSION=$(git_head_comment | sed 's/.*\(#ver:\(\S\+\)\).*/\2/')
 	else
 	    [ "$2" != "triggered" ] && UPDATE_VERSION="$2"
-	    UPDATE_VERSION=$(echo $UPDATE_VERSION | sed 's/^version-//')
+	    UPDATE_VERSION=$(echo $UPDATE_VERSION | sed -e 's/^version-//' -e 's/TILDE/~/g')
 	fi
 
 	if git_head_comment | grep -q "#dist:\S\+"; then
