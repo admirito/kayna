@@ -210,7 +210,9 @@ if __name__ == '__main__':
         bind_address = ask_default("Enter bind host IP address", "172.17.0.1")
         port = ask_default("Enter listening port number", "4443")
         key = ask_default("Enter API key", "eldorado")
-        prefix = ask_default("Enter docker image name prefix", "kayna-")
+        prefix = ask_default("Enter docker image name prefix [If you have a "
+            "private docker registry you can put that here too, e.g. "
+            "private-registry.com/kayna-]", "kayna-")
 
         user = ask_default("Enter the user to run the daemon as", "mapp")
         group = ask_default("Enter the group to run the daemon as", "mapp")

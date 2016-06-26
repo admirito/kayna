@@ -1,0 +1,8 @@
+Template: kayna-host-agent/docker_image_prefix
+Type: string
+Default: kayna-
+Description: Enter a prefix for docker images:
+ Please provide a prefix. Kayna docker host agent will add this prefix
+ before the name of image when commit command is being executed. If you
+ have a private docker registry you can add the registry address with a
+ leading / to this prefix. E.g. private-docker-registry.com/kayna-
