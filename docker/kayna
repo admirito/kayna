@@ -145,6 +145,8 @@ case "$1" in
 		[ -n "$DISTRIBUTION" ] && NEW_DIST="$DISTRIBUTION-unstable" || NEW_DIST="unstable"
 	    elif echo "$2" | grep -q "^version-"; then
 		[ -n "$DISTRIBUTION" ] && NEW_DIST="$DISTRIBUTION-testing" || NEW_DIST="testing"
+	    elif [ -n "$DISTRIBUTION" ] && debian_distribution | grep -q "^[a-z0-9]\+$"; then
+		NEW_DIST="$DISTRIBUTION-$(debian_distribution)"
 	    fi
 	fi
 
