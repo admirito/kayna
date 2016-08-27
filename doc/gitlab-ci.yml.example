@@ -38,6 +38,7 @@ build_job:
     - kayna build
   artifacts:
     untracked: true
+    expire_in: 8 hours
 
 test_job:
   image: "kayna-$CI_BUILD_REF"
@@ -67,6 +68,7 @@ debuild_job:
       - KAYNA-LOG
       - LINTIAN*
       - ELDORADO/
+    expire_in: 2 weeks
 
 upload_job:
   stage: upload
@@ -100,6 +102,7 @@ all_in_one_job:
     - kayna upload
   artifacts:
     untracked: true
+    expire_in: 1 week
 
 diagnose_job:
   stage: diagnose
@@ -109,6 +112,7 @@ diagnose_job:
     - kayna diagnose
   artifacts:
     untracked: true
+    expire_in: 1 week
 
 cleanup_job:
   stage: cleanup
