@@ -22,7 +22,7 @@ RUN chmod 600 /root/.ssh/id_rsa && \
     apt-get install -y --force-yes devscripts equivs git curl zile && \
     ln -s /usr/bin/zile /usr/bin/emacs || true && \
     curl http://eldorado/pepero.gpg.key | apt-key add - && \
-    printf "deb http://eldorado/ trusty-testing main\n" > /etc/apt/sources.list.d/eldorado.list && \
+    printf "deb http://eldorado/ xenial-testing main\n" > /etc/apt/sources.list.d/eldorado.list && \
     apt-get update && \
     (echo; cat /root/dput.cf) >> /etc/dput.cf && \
     rm /root/dput.cf && \
