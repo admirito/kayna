@@ -62,7 +62,7 @@ Description: tools to setup debian packaging with GitLab CI
 
 Package: kayna-gitlab-plugin
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, gitlab-ce | gitlab-ee
+Depends: ${shlibs:Depends}, ${misc:Depends}, screen, gitlab-ce | gitlab-ee
 Description: tools to setup debian packaging with GitLab CI
  GitLab Continuous Integration (CI) is part of the GitLab project to build,
  test and deploy the developing system while pushing the source code to the

@@ -24,9 +24,19 @@ while read oldrev newrev refname; do
 
 		echo $oldrev $newrev refs/tags/version-$VERSION >>$PIPE
 	    fi
+	else
+	    DISTRIBUTION=$(git show $newrev:debian/changelog 2>/dev/null | dpkg-parsechangelog -l- --show-field Distribution 2>/dev/null | sed 's/^.*-//')
+
+	    # In the gitlab 8.9 we were able to trick GitLab without creating a real tag with this command:
+	    # [ -n "$DISTRIBUTION" ] && echo $oldrev $newrev refs/tags/kayna/dist/$DISTRIBUTION >>$PIPE
+	    # In the newer versions we have to create a real tag:
+	    if [ -n "$DISTRIBUTION" ]; then
+		TAG="kayna/dist/$DISTRIBUTION-${newrev:0:8}"
+		git tag -am "Added by Kayna for Gitlab CI" "$TAG" "$newrev" 2>/dev/null
+		echo $oldrev $newrev "refs/tags/$TAG" >>$PIPE
+		screen -m -d bash -c "sleep 20; git tag -d $TAG &>/dev/null" &
+	    fi
 	fi
-	DISTRIBUTION=$(git show $newrev:debian/changelog 2>/dev/null | dpkg-parsechangelog -l- --show-field Distribution 2>/dev/null | sed 's/^.*-//')
-	[ -n "$DISTRIBUTION" ] && echo $oldrev $newrev refs/tags/kayna/dist/$DISTRIBUTION >>$PIPE
     fi
 done
 
