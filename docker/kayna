@@ -254,7 +254,9 @@ case "$1" in
 	    [ "$2" = "-f" ] && echo "Cannot upload UNRELEASED distribution." | tee -a KAYNA-LOG  && exit 1
 	    echo "Skip uploading UNRELEASED distribution." | tee -a KAYNA-LOG
 	else
-            dput -u eldorado ELDORADO/*.changes | tee -a KAYNA-LOG
+	    for changes_file in ELDORADO/*.changes; do
+		dput -u "eldorado:$(basename $changes_file)" "$changes_file"  | tee -a KAYNA-LOG
+	    done
 	fi
     ;;
 
