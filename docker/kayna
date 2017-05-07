@@ -6,6 +6,8 @@ set -e
 # <command> | tee out.txt ; test ${PIPESTATUS[0]} -eq 0
 set -o pipefail
 
+[ -f "/etc/kayna/kayna.conf" ] && . /etc/kayna/kayna.conf || true
+
 curl() # fix curl in Ubuntu xenial
 {
     /usr/bin/curl "$@" || [ "$?" = "56" ]
@@ -52,6 +54,11 @@ debian_changes_files()
     sed -n '/^Files:\s*$/,/^\s*$/p' "$changes_file" | sed -e '1d' | awk '{ print $5 }'
 }
 
+docker_container_id()
+{
+    awk -F'[:/]' '(($4 == "docker") && (lastId != $NF)) { lastId = $NF; print $NF; }' /proc/self/cgroup
+}
+
 remove_color()
 {
     # Adapted from:
@@ -79,21 +86,40 @@ url_encode()
     echo "${encoded}"
 }
 
+if [ -z "$SUITE" ] && [ -n "$ELDORADO_SUITE_REGEX" ] &&
+       debian_distribution | grep -qP "$ELDORADO_SUITE_REGEX"; then
+    SUITE=$(debian_distribution)
+elif [ -n "$ELDORADO_DEFAULT_SUITE" ]; then
+    SUITE="$ELDORADO_DEFAULT_SUITE"
+fi
+
+if [ -z "$USED_COMPONENT" ] && [ -n "$ELDORADO_DEFAULT_USED_COMPONENT" ]; then
+    COMPONENT="$ELDORADO_DEFAULT_USED_COMPONENT"
+fi
+if [ -z "$UPLOAD_COMPONENT" ] && [ -n "$ELDORADO_DEFAULT_UPLOAD_COMPONENT" ]; then
+    COMPONENT="$ELDORADO_DEFAULT_UPLOAD_COMPONENT"
+fi
+
 case "$1" in
     build-dep)
         printf "You have to follow the Golde Eaglen to satisfy your build dependencies.\n\n" | tee -a KAYNA-LOG
-	(apt-get update || true) 2> >(tee -a KAYNA-LOG)
-        if ! mk-build-deps -irt "apt-get --no-install-recommends -y --force-yes" debian/control | tee -a KAYNA-LOG; then
+
+	if [ -n "$SUITE" ]; then
+	    printf "Kayna will enable eldorado (suite = $SUITE, component = ${USED_COMPONENT-testing}) debian repos before installing required packages.\n\n" | tee -a KAYNA-LOG
+	    printf "deb http://eldorado/ $SUITE ${USED_COMPONENT-testing}\n" > /etc/apt/sources.list.d/eldorado.list
+	fi
+
+	(apt update || true) 2> >(tee -a KAYNA-LOG)
+        if ! mk-build-deps -irt "apt --no-install-recommends -y --force-yes" debian/control | tee -a KAYNA-LOG; then
             printf "\n==========\nOops\x21 Something bad happened\x21\nTo find El-Dorado you shall pass Catan.\nYou have to fight the barbarians to save the island.\nFollow the golden eagle to fix the problem and reach El Hombre Dorado.\nOr simpler, ask the right one.\nWho has created the whole Catan, El-Dorado and even Kayna herself?\nDidn't you still believe?\nIf yes, just send your prayers to mrazavi64 at gmail dot com.\n" | tee -a KAYNA-LOG
             exit 1
         fi
     ;;
 
     docker-commit)
-	CONTAINER_ID="$2"
-	IMAGE_NAME="$3"
-	printf "Kayna uses her agent to commit the docker container $CONTAINER_ID to $IMAGE_NAME\n" | tee -a KAYNA-LOG
-	curl -w\\n -q -k "https://172.17.0.1:4443/eldorado/docker/commit?container=$CONTAINER_ID&image=$IMAGE_NAME" | tee -a KAYNA-LOG
+	IMAGE_NAME="$2"
+	printf "Kayna uses her agent to commit the docker container $(docker_container_id) to $IMAGE_NAME\n" | tee -a KAYNA-LOG
+	curl -w\\n -q -k "https://172.17.0.1:4443/eldorado/docker/commit?container=$(docker_container_id)&image=$IMAGE_NAME" | tee -a KAYNA-LOG
     ;;
 
     docker-rmi)
@@ -127,44 +153,7 @@ case "$1" in
     ;;
    
     debuild)
-	if git_head_comment | grep -q "#version:\S\+"; then
-	    UPDATE_VERSION=$(git_head_comment | sed 's/.*\(#ver:\(\S\+\)\).*/\2/')
-	else
-	    [ "$2" != "triggered" ] && UPDATE_VERSION="$2"
-	    UPDATE_VERSION=$(echo $UPDATE_VERSION | sed -e 's/^version-//' -e 's/TILDE/~/g')
-	fi
-
-	if git_head_comment | grep -q "#dist:\S\+"; then
-	    NEW_DIST=$(git_head_comment | sed 's/.*\(#dist:\(\S\+\)\).*/\2/')
-	else
-	    NEW_DIST="$3"
-	fi
-
-	if [ -z "$NEW_DIST" ]; then
-	    if [ "$2" = "triggered" ]; then
-		[ -n "$DISTRIBUTION" ] && NEW_DIST="$DISTRIBUTION-unstable" || NEW_DIST="unstable"
-	    elif echo "$2" | grep -q "^version-"; then
-		[ -n "$DISTRIBUTION" ] && NEW_DIST="$DISTRIBUTION-testing" || NEW_DIST="testing"
-	    elif [ -n "$DISTRIBUTION" ] && debian_distribution | grep -q "^[a-z0-9]\+$"; then
-		NEW_DIST="$DISTRIBUTION-$(debian_distribution)"
-	    fi
-	fi
-
-	if [ -n "$NEW_DIST" ]; then
-	    sed -i "1 s/\(\(\S\+\s\+\)\{2\}\)\S\+;/\1$NEW_DIST;/" debian/changelog
-	    echo "Kayna set the debian/changelog distribution to $NEW_DIST" | tee -a KAYNA-LOG
-	fi
-
-	if [ -z "$UPDATE_VERSION" ] && debian_distribution | grep -q "^unstable$\|^.\+-unstable$" ||
-	   git_head_comment | grep -q "#version++"; then
-	    UPDATE_VERSION="+"
-	fi
-
-	if [ -z "$UPDATE_VERSION" ]; then
-	    echo "Kayna will not modify the debian/changelog version number." | tee -a KAYNA-LOG
-	elif [ "$UPDATE_VERSION" = "=" ]; then
-	    echo "Kayna will keep the debian/changelog version number." | tee -a KAYNA-LOG
-	elif [ "$UPDATE_VERSION" = "+" ]; then
+	if [ "$INCREMENTAL_VERSION" = "1" ]; then
 	    echo "Finding a new version for $(project_name) (id=$(project_unique_id)) $(debian_version) ..." | tee -a KAYNA-LOG
 	    ID=$(url_encode $(project_unique_id))
 	    PREFIX=$(url_encode $(debian_version))
@@ -180,8 +169,7 @@ case "$1" in
 	    sed -i "1 s/\(\S\+\s\+\)\S\+/\1($NEW_VERSION)/" debian/changelog
 	    echo "debian changelog version modified to version $NEW_VERSION" | tee -a KAYNA-LOG
 	else
-	    echo "Modify debian version to '$UPDATE_VERSION'" | tee -a KAYNA-LOG
-	    sed -i "1 s/\(\S\+\s\+\)\S\+/\1($UPDATE_VERSION)/" debian/changelog
+	    echo "Kayna will not modify the debian/changelog version number." | tee -a KAYNA-LOG
 	fi
 	
 	if git_head_comment | grep -q "#notest\|#nocheck"; then
@@ -251,11 +239,21 @@ case "$1" in
 
     upload)
 	if debian_distribution | grep -q "^UNRELEASED$\|^.\+-UNRELEASED$"; then
-	    [ "$2" = "-f" ] && echo "Cannot upload UNRELEASED distribution." | tee -a KAYNA-LOG  && exit 1
 	    echo "Skip uploading UNRELEASED distribution." | tee -a KAYNA-LOG
+	    [ "$2" = "-f" ] && echo "Cannot upload UNRELEASED distribution." | tee -a KAYNA-LOG  && exit 1
 	else
+	    if [ -n "$STRICT_DEBIAN_DIST_NAME" ] &&
+	       [ "$(debian_distribution)" != "$STRICT_DEBIAN_DIST_NAME" ]; then
+		echo "branch name is $STRICT_DEBIAN_DIST_NAME but debian distribution is $(debian_distribution). Kayna will abort uploading of the package to eldorado." | tee -a KAYNA-LOG
+		exit 1
+	    fi
+
 	    for changes_file in ELDORADO/*.changes; do
-		dput -u "eldorado:$(basename $changes_file)" "$changes_file"  | tee -a KAYNA-LOG
+		if [ -n "$SUITE" ]; then
+		    dput -u "eldorado-with-args:$SUITE:$UPLOAD_COMPONENT:$(basename $changes_file)" "$changes_file"  | tee -a KAYNA-LOG
+		else
+		    dput -u "eldorado-with-changes:$(basename $changes_file)" "$changes_file"  | tee -a KAYNA-LOG
+		fi
 	    done
 	fi
     ;;
@@ -265,7 +263,15 @@ case "$1" in
     ;;
 
     diagnose)
-        echo "TODO: Kayna will diagnose the problem for you." | tee -a KAYNA-LOG
+	IMAGE_NAME="$2"
+
+	echo "Kayna is copying project files to /builds-copy for diagnose." | tee -a KAYNA-LOG
+	cp -a "$CI_PROJECT_DIR/.." "/builds-copy"
+
+	printf "Kayna uses her agent to commit the docker container to $IMAGE_NAME\n" | tee -a KAYNA-LOG
+	curl -w\\n -q -k "https://172.17.0.1:4443/eldorado/docker/commit?container=$(docker_container_id)&image=$IMAGE_NAME" | tee -a KAYNA-LOG
+
+	#TODO: push the image to docker registry
     ;;
 
     *)

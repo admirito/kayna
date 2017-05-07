@@ -2,6 +2,9 @@ image: kayna:latest
 
 variables:
   DISTRIBUTION: xenial
+  STABLE_BRANCH_REGEX: '^(release\d{2}|release)$'
+  NEXT_RELEASE_NAME: 'release'
+  GIT_SUBMODULE_STRATEGY: recursive
 
 stages:
   - init
@@ -9,116 +12,142 @@ stages:
   - test
   - debuild
   - upload
+  - docker_build
   - deploy
-  - all_in_one
   - diagnose
-  - cleanup
+
+.only_filters:
+  build_only_on: &build_filter
+    - branches
+    - triggers
+  deploy_only_on: &deploy_filter
+    - triggers
+
+before_script:
+  - 'echo "Distribution: $DISTRIBUTION"'
+  - export PATH="/usr/lib/ccache/:$PATH"
+  - export CCACHE_DIR=/cache/$DISTRIBUTION/ccache_dir
 
 init_job:
+  image: "kayna:$DISTRIBUTION"
   stage: init
-  only:
-    - /^version-.+/
-    - triggers
+  only: *build_filter
   script:
+    - CACHEDIR="/cache/$DISTRIBUTION"
+    - 'mkdir -p $CACHEDIR || :'
+    - echo 0 > APT-UPDATE
+    - '[ "$FORCE_NEW_DOCKERIMAGE" = "1" ] && rm $CACHEDIR/_last_control || :'
+    - 'diff -u debian/control $CACHEDIR/_last_control && [ "$(date +%G%V)" = "$(cat $CACHEDIR/_image_build_ts)" ] && echo "A healthy image is already exists." && exit 0 || :'
+    - kayna docker-rmi "$DISTRIBUTION-$CI_PROJECT_ID"
     - kayna build-dep
-    - CONTAINER_ID=$(awk -F'[:/]' '(($4 == "docker") && (lastId != $NF)) { lastId = $NF; print $NF; }' /proc/self/cgroup)
-    - kayna docker-commit "$CONTAINER_ID" "$CI_BUILD_REF"
+    - which gcc >/dev/null && apt install -y ccache
+    - kayna docker-commit "$DISTRIBUTION-$CI_PROJECT_ID"
+    - echo 1 > APT-UPDATE
+    - cp debian/control $CACHEDIR/_last_control
+    - date +%G%V > $CACHEDIR/_image_build_ts
   artifacts:
+    name: init_log_archive
+    expire_in: 12h
     paths:
+      - APT-UPDATE
       - KAYNA-LOG
 
 build_job:
-  image: "kayna-$CI_BUILD_REF"
+  image: "kayna-$DISTRIBUTION-$CI_PROJECT_ID"
   stage: build
-  only:
-    - /^version-.+/
-    - triggers
+  only: *build_filter
   script:
+    - '[ "$(cat APT-UPDATE || true)" != "1" ] && kayna build-dep'
     - rm -f KAYNA-LOG
+    - export CCACHE_BASEDIR=$PWD
+    - 'mkdir -p ${CCACHE_DIR} || :'
     - kayna build
+    # add file to empty directories, so they are picked by build artifacts
+    - find -empty -type d -exec touch {}/.placeholder \;
   artifacts:
+    name: build_artifacts
     untracked: true
     expire_in: 8 hours
 
 test_job:
-  image: "kayna-$CI_BUILD_REF"
+  image: "kayna-$DISTRIBUTION-$CI_PROJECT_ID"
   stage: test
-  only:
-    - /^version-.+/
-    - triggers
+  only: *build_filter
+  coverage: '/^TOTAL.*\s+(\d+\%)$/'
   script:
     - rm -f KAYNA-LOG
+    - export CCACHE_BASEDIR=$PWD
     - kayna test
+    - mkdir -p debian/testlog
+    - cp debian/*.debhelper.log debian/testlog/
   artifacts:
+    name: test_logs_archive
+    expire_in: 8 hours
     paths:
       - debian/*.debhelper.log
+      - debian/testlog
       - KAYNA-LOG
 
 debuild_job:
-  image: "kayna-$CI_BUILD_REF"
+  image: "kayna-$DISTRIBUTION-$CI_PROJECT_ID"
   stage: debuild
-  only:
-    - /^version-.+/
-    - triggers
+  only: *build_filter
   script:
     - rm -f KAYNA-LOG
-    - '[ "$CI_BUILD_TRIGGERED" = "true" ] && kayna debuild triggered || kayna debuild $CI_BUILD_TAG'
+    - 'cp debian/testlog/* debian &> /dev/null || :'
+    - echo "$CI_COMMIT_REF_NAME" | grep -qP "$STABLE_BRANCH_REGEX" || export INCREMENTAL_VERSION=1
+    - kayna debuild
   artifacts:
+    name: deb_package
     paths:
       - KAYNA-LOG
       - LINTIAN*
       - ELDORADO/
-    expire_in: 2 weeks
+    expire_in: 1 week
 
 upload_job:
+  image: "kayna:$DISTRIBUTION"
   stage: upload
-  only:
-    - /^version-.+/
-    - triggers
+  only: *build_filter
   script:
     - rm -f KAYNA-LOG
+    - echo "$CI_COMMIT_REF_NAME" | grep -qP "$STABLE_BRANCH_REGEX" && export SUITE="$CI_COMMIT_REF_NAME" UPLOAD_COMPONENT=testing STRICT_DEBIAN_DIST_NAME="$CI_COMMIT_REF_NAME" || export UPLOAD_COMPONENT=unstable
+    - '[ "$CI_COMMIT_REF_NAME" = "$NEXT_RELEASE_NAME" ] && STRICT_DEBIAN_DIST_NAME= || :'
     - kayna upload
   artifacts:
+    name: upload_log_archive
     paths:
       - KAYNA-LOG
       - ELDORADO/*.upload
+    expire_in: 12h
 
-deploy_job:
-  stage: deploy
-  only:
-    - /^version-.+/
-    - triggers
+.docker_build_job:
+  image: "kayna-$DISTRIBUTION-$CI_PROJECT_ID"
+  stage: docker_build
+  only: *deploy_filter
   script:
     - rm -f KAYNA-LOG
     - kayna deploy
 
-all_in_one_job:
-  stage: all_in_one
-  only:
-    - /kayna/dist/(?!testing$|.+-testing$)/
-  script:
-    - kayna build-dep
-    - kayna debuild
-    - kayna upload
-  artifacts:
-    untracked: true
-    expire_in: 1 week
-
-diagnose_job:
-  stage: diagnose
-  when: on_failure
+.deploy_job:
+  image: "kayna-$DISTRIBUTION-$CI_PROJECT_ID"
+  stage: deploy
+  only: *deploy_filter
   script:
     - rm -f KAYNA-LOG
-    - kayna diagnose
+    - kayna deploy
   artifacts:
     untracked: true
-    expire_in: 1 week
+    expire_in: 1 day
 
-cleanup_job:
-  stage: cleanup
-  only:
-    - /^version-.+/
-    - triggers
-  when: always
+.diagnose_job:
+  stage: diagnose
+  allow_failure: true
+  when: manual #on_failure
   script:
-    - kayna docker-rmi "$CI_BUILD_REF"
+    - rm -f KAYNA-LOG
+    - kayna diagnose "kayna-diagnose-$CI_JOB_ID"
+  artifacts:
+    untracked: true
+    expire_in: 1 day
+

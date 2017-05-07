@@ -43,6 +43,6 @@ for i in "$@"; do
     ! echo "" "$i" | grep -q "^\s*-" && image_name="$i" && break
 done
 
-(cd "$build_dir" && exec docker build -t "$image_name" .)
+(cd "$build_dir" && exec make "$image_name")
 
 rm -rf $build_dir

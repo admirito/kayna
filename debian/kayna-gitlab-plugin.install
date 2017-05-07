@@ -1,1 +1,2 @@
 gitlab/* usr/share/kayna/gitlab-hooks
+etc/gitlab-hooks.conf etc/kayna/

@@ -10,33 +10,31 @@
 GITLAB_POST_RECEIVE=/opt/gitlab/embedded/service/gitlab-shell/hooks/gitlab-post-receive
 PIPE=$(mktemp)
 
+[ -f /etc/kayna/gitlab-hooks.conf ] && . /etc/kayna/gitlab-hooks.conf || echo "* Kayna coudn't find gitlab-hooks.conf file. Please contact the CI administrator."
+
 while read oldrev newrev refname; do
     echo $oldrev $newrev $refname >>$PIPE
 
     if ! echo "$newrev" | grep -q "0\{40\}" &&        # skip deletes
-	! echo "$refname" | grep -q "^refs/tags/" &&  # skip tags
-	[ -n "$newrev" ]; then
-	if diff <(git show $oldrev:debian/changelog 2>/dev/null | head -n1) <(git show $newrev:debian/changelog 2>/dev/null | head -n1) | grep -q "^> \S\+\s\+(\S\+)\s\+\(testing\|\S\+-testing\);"; then
-	    VERSION=$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Version | sed 's/~/TILDE/g')
-	    if git tag -am "$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Changes | sed '1d')" "version-$VERSION" $newrev 2>/dev/null; then
-		echo "* Kayna added a new tag: version-$VERSION"
-		echo "* Use the 'git pull' command to fetch the new tags"
+	 echo "$refname" | grep -q "^refs/heads/" &&  # for tags it is
+						      # like refs/tags/
+	 [ -n "$newrev" ] &&
+	 git show $newrev:debian/changelog &>/dev/null # debian/changelog
+						       # log exists
+    then
+	VERSION=$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Version | sed 's/~/TILDE/g')
 
-		echo $oldrev $newrev refs/tags/version-$VERSION >>$PIPE
-	    fi
-	else
-	    DISTRIBUTION=$(git show $newrev:debian/changelog 2>/dev/null | dpkg-parsechangelog -l- --show-field Distribution 2>/dev/null | sed 's/^.*-//')
+	for branch in $ELDORADO_RELEASE_BRANCHES; do
+	    if [ "$refname" = "refs/heads/$branch" ]; then
+		if git tag -am "$(git show $newrev:debian/changelog | dpkg-parsechangelog -l- --show-field Changes | sed '1d')" "version-$VERSION" $newrev 2>/dev/null; then
+		    echo "* Kayna added a new tag: version-$VERSION"
+		    echo "* Use the 'git pull' command to fetch the new tags"
 
-	    # In the gitlab 8.9 we were able to trick GitLab without creating a real tag with this command:
-	    # [ -n "$DISTRIBUTION" ] && echo $oldrev $newrev refs/tags/kayna/dist/$DISTRIBUTION >>$PIPE
-	    # In the newer versions we have to create a real tag:
-	    if [ -n "$DISTRIBUTION" ]; then
-		TAG="kayna/dist/$DISTRIBUTION-${newrev:0:8}"
-		git tag -am "Added by Kayna for Gitlab CI" "$TAG" "$newrev" 2>/dev/null
-		echo $oldrev $newrev "refs/tags/$TAG" >>$PIPE
-		screen -m -d bash -c "sleep 20; git tag -d $TAG &>/dev/null" &
+		    echo $oldrev $newrev refs/tags/version-$VERSION >>$PIPE
+		fi
+		break
 	    fi
-	fi
+	done
     fi
 done
 

@@ -21,7 +21,7 @@ Description: tools to setup debian packaging with GitLab CI (metapackage)
 Package: kayna-docker
 Architecture: any
 Pre-Depends: adduser (>= 3.11)
-Depends: ${shlibs:Depends}, ${misc:Depends}, docker.io
+Depends: ${shlibs:Depends}, ${misc:Depends}, docker.io, make
 Recommends: gitlab-ci-multi-runner, kayna-host-agent
 Description: tools to setup debian packaging with GitLab CI
  GitLab Continuous Integration (CI) is part of the GitLab project to build,

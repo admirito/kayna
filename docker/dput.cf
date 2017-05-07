@@ -1,7 +1,15 @@
-[eldorado]
+[eldorado-with-args]
 method			= rsync
 fqdn			= eldorado
 login			= kaynaci
 allow_dcut		= 1
-incoming		= /srv/reprepro/incoming
-post_upload_command     = curl http://eldorado/cgi-bin/follow-the-golden-eagle?changes=%(eldorado)s
+incoming		= /home/carlos/.aptly/public/incoming
+post_upload_command     = wget -q --content-on-error -O- http://eldorado/cgi-bin/follow-the-golden-eagle?args=%(eldorado-with-args)s
+
+[eldorado-with-changes]
+method			= rsync
+fqdn			= eldorado
+login			= kaynaci
+allow_dcut		= 1
+incoming		= /home/carlos/.aptly/public/incoming
+post_upload_command     = wget -q --content-on-error -O- http://eldorado/cgi-bin/follow-the-golden-eagle?changes=%(eldorado-with-changes)s
