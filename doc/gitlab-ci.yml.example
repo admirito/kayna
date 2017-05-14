@@ -5,6 +5,7 @@ variables:
   STABLE_BRANCH_REGEX: '^(release\d{2}|release)$'
   NEXT_RELEASE_NAME: 'release'
   GIT_SUBMODULE_STRATEGY: recursive
+  DOCKER_DRIVER: overlay
 
 stages:
   - init
@@ -119,15 +120,26 @@ upload_job:
     paths:
       - KAYNA-LOG
       - ELDORADO/*.upload
+      - ELDORADO/.*
     expire_in: 12h
 
-.docker_build_job:
+docker_build_job:
   image: "kayna-$DISTRIBUTION-$CI_PROJECT_ID"
   stage: docker_build
-  only: *deploy_filter
+  only: *build_filter
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
   script:
     - rm -f KAYNA-LOG
-    - kayna deploy
+    - echo "$CI_COMMIT_REF_NAME" | grep -qP "$STABLE_BRANCH_REGEX" && export DOCKER_EXTRA_TAGS="$CI_COMMIT_REF_NAME"
+    - kayna docker-build
+  artifacts:
+    name: docker_build_log_archive
+    expire_in: 12h
+    paths:
+      - KAYNA-LOG
 
 .deploy_job:
   image: "kayna-$DISTRIBUTION-$CI_PROJECT_ID"

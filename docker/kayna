@@ -59,6 +59,21 @@ docker_container_id()
     awk -F'[:/]' '(($4 == "docker") && (lastId != $NF)) { lastId = $NF; print $NF; }' /proc/self/cgroup
 }
 
+docker_tag_restriction()
+{
+    # https://docs.docker.com/engine/reference/commandline/tag/#parent-command
+    # https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-Version
+    sed -e 's/:/COLON/g' -e 's/+/PLUS/g' -e 's/~/TILDE/g' -e 's/[^A-Za-z0-9._-]//g' | head -c128
+}
+
+docker_fullname_restriction()
+{
+    fullname=$(cat)
+    name=$(echo $fullname | sed 's/:.*/:/g')
+    version=$(echo $fullname | sed 's/[^:]*:\?//' | docker_tag_restriction)
+    echo $name$version
+}
+
 remove_color()
 {
     # Adapted from:
@@ -194,6 +209,7 @@ case "$1" in
 	rm -f debian/files
 
 	mkdir -p ELDORADO
+	debian_version > ELDORADO/.DEB_VERSION
 	for file in $(debian_changes_files ../$SOURCE_PREFIX*.changes); do
 	    mv "../$file" ELDORADO/
 	done
@@ -251,11 +267,40 @@ case "$1" in
 	    for changes_file in ELDORADO/*.changes; do
 		if [ -n "$SUITE" ]; then
 		    dput -u "eldorado-with-args:$SUITE:$UPLOAD_COMPONENT:$(basename $changes_file)" "$changes_file"  | tee -a KAYNA-LOG
+		    echo $SUITE > ELDORADO/.UPLOAD_SUITE
+		    echo $UPLOAD_COMPONENT > ELDORADO/.UPLOAD_COMPONENT
 		else
 		    dput -u "eldorado-with-changes:$(basename $changes_file)" "$changes_file"  | tee -a KAYNA-LOG
 		fi
 	    done
 	fi
+    ;;
+
+    docker-build)
+	DOCKER_USER=${DOCKER_USER:-kayna}
+	DOCKER_REGISTRY=${DOCKER_REGISTRY:-dakar}
+
+	echo "login to '$DOCKER_REGISTRY' docker registry with the user '$DOCKER_USER' and \$KAYNA_DAKAR_TOKEN value as the password." | tee -a KAYNA-LOG
+        docker login -u $DOCKER_USER -p $KAYNA_DAKAR_TOKEN $DOCKER_REGISTRY | tee -a KAYNA-LOG || exit 1
+
+	DOCKER_DIR=${DOCKER_DIR:-.}
+	DOCKER_FILE=${DOCKER_FILE:-docker/Dockerfile}
+
+	[ -f ELDORADO/.DEB_VERSION ] && DOCKER_VERSION=${DOCKER_VERSION:-$(cat ELDORADO/.DEB_VERSION)}
+	[ -f ELDORADO/.UPLOAD_SUITE ] && DOCKER_SUITE=${DOCKER_SUITE:-$(cat ELDORADO/.UPLOAD_SUITE)}
+	[ -f ELDORADO/.UPLOAD_COMPONENT ] && DOCKER_COMPONENT=${DOCKER_COMPONENT:-$(cat ELDORADO/.UPLOAD_COMPONENT)}
+
+	DOCKER_TAGS=${DOCKER_TAGS:-$CI_PROJECT_NAME:$DOCKER_VERSION $CI_PROJECT_NAME:latest}
+	[ -n "$DOCKER_EXTRA_TAGS" ] && DOCKER_TAGS="$DOCKER_TAGS $DOCKER_EXTRA_TAGS"
+	DOCKER_TAGS=$(for i in $DOCKER_TAGS; do echo -n $DOCKER_REGISTRY/$(echo $i | docker_fullname_restriction) " "; done)
+
+	echo "run docker build on '$DOCKER_FILE' from '$DOCKER_DIR' directory with version=$DOCKER_VERSION suite=$DOCKER_SUITE component=$DOCKER_COMPONENT arguments and $DOCKER_TAGS tags." | tee -a KAYNA-LOG
+	docker build --build-arg=version=$DOCKER_VERSION --build-arg=suite=$DOCKER_SUITE --build-arg=component=$DOCKER_COMPONENT $(for i in $DOCKER_TAGS; do echo -t $i; done) ${DOCKER_FILE:+-f $DOCKER_FILE} "$DOCKER_DIR" | tee -a KAYNA-LOG || exit 1
+
+	for tag in $DOCKER_TAGS; do
+	    echo "pushing $tag ..." | tee -a KAYNA-LOG
+	    docker push "$tag" | tee -a KAYNA-LOG
+	done
     ;;
 
     deploy)

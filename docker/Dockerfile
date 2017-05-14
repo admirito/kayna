@@ -20,7 +20,7 @@ RUN chmod 600 /root/.ssh/id_rsa && \
     sed -i 's|/archive.ubuntu.com|/catan.archive.ubuntu.com|' /etc/apt/sources.list && \
     sed -i 's|^\s*deb-src|# deb-src|' /etc/apt/sources.list && \
     apt update && \
-    apt install -y --force-yes devscripts equivs git curl wget zile ccache && \
+    apt install -y --force-yes devscripts equivs git curl wget zile ccache docker.io && \
     ln -s /usr/bin/zile /usr/bin/emacs || true && \
     curl http://eldorado/pepero.gpg.key | apt-key add - && \
     #printf "deb http://eldorado/ xenial-testing main\n" > /etc/apt/sources.list.d/eldorado.list && \
