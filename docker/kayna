@@ -283,18 +283,21 @@ case "$1" in
 	echo "login to '$DOCKER_REGISTRY' docker registry with the user '$DOCKER_USER' and \$KAYNA_DAKAR_TOKEN value as the password." | tee -a KAYNA-LOG
         docker login -u $DOCKER_USER -p $KAYNA_DAKAR_TOKEN $DOCKER_REGISTRY | tee -a KAYNA-LOG || exit 1
 
-	DOCKER_DIR=${DOCKER_DIR:-.}
-	DOCKER_FILE=${DOCKER_FILE:-docker/Dockerfile}
+	DOCKER_DIR=${DOCKER_DIR:-docker}
+	#DOCKER_FILE=${DOCKER_FILE:-Dockerfile}
 
 	[ -f ELDORADO/.DEB_VERSION ] && DOCKER_VERSION=${DOCKER_VERSION:-$(cat ELDORADO/.DEB_VERSION)}
 	[ -f ELDORADO/.UPLOAD_SUITE ] && DOCKER_SUITE=${DOCKER_SUITE:-$(cat ELDORADO/.UPLOAD_SUITE)}
 	[ -f ELDORADO/.UPLOAD_COMPONENT ] && DOCKER_COMPONENT=${DOCKER_COMPONENT:-$(cat ELDORADO/.UPLOAD_COMPONENT)}
 
-	DOCKER_TAGS=${DOCKER_TAGS:-$CI_PROJECT_NAME:$DOCKER_VERSION $CI_PROJECT_NAME:latest}
-	[ -n "$DOCKER_EXTRA_TAGS" ] && DOCKER_TAGS="$DOCKER_TAGS $DOCKER_EXTRA_TAGS"
-	DOCKER_TAGS=$(for i in $DOCKER_TAGS; do echo -n $DOCKER_REGISTRY/$(echo $i | docker_fullname_restriction) " "; done)
+	# Note: DOCKER_NAME variable is used internally by gitlab
+	DOCKER_BASE_NAME="${DOCKER_BASE_NAME:-$CI_PROJECT_NAME}"
+	DOCKER_TAGS=${DOCKER_TAGS:-$DOCKER_BASE_NAME:$DOCKER_VERSION}
+	[ -n "$DOCKER_EXTRA_TAGS" ] && DOCKER_TAGS="$DOCKER_TAGS $(for tag in $DOCKER_EXTRA_TAGS; do echo $DOCKER_BASE_NAME:$tag; done)"
 
-	echo "run docker build on '$DOCKER_FILE' from '$DOCKER_DIR' directory with version=$DOCKER_VERSION suite=$DOCKER_SUITE component=$DOCKER_COMPONENT arguments and $DOCKER_TAGS tags." | tee -a KAYNA-LOG
+	DOCKER_TAGS=$(for i in $DOCKER_TAGS; do echo -n $DOCKER_REGISTRY/$(echo $i | docker_fullname_restriction) ""; done)
+
+	echo "run docker build on '${DOCKER_FILE:-Dockerfile}' from '$DOCKER_DIR' directory with version=$DOCKER_VERSION suite=$DOCKER_SUITE component=$DOCKER_COMPONENT arguments and $DOCKER_TAGS tags." | tee -a KAYNA-LOG
 	docker build --build-arg=version=$DOCKER_VERSION --build-arg=suite=$DOCKER_SUITE --build-arg=component=$DOCKER_COMPONENT $(for i in $DOCKER_TAGS; do echo -t $i; done) ${DOCKER_FILE:+-f $DOCKER_FILE} "$DOCKER_DIR" | tee -a KAYNA-LOG || exit 1
 
 	for tag in $DOCKER_TAGS; do

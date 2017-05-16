@@ -133,7 +133,7 @@ docker_build_job:
     DOCKER_HOST: tcp://docker:2375
   script:
     - rm -f KAYNA-LOG
-    - echo "$CI_COMMIT_REF_NAME" | grep -qP "$STABLE_BRANCH_REGEX" && export DOCKER_EXTRA_TAGS="$CI_COMMIT_REF_NAME"
+    - echo "$CI_COMMIT_REF_NAME" | grep -qP "$STABLE_BRANCH_REGEX" && export DOCKER_EXTRA_TAGS="latest" || export DOCKER_EXTRA_TAGS="latest-unstable"
     - kayna docker-build
   artifacts:
     name: docker_build_log_archive
