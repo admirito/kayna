@@ -298,7 +298,7 @@ case "$1" in
 	DOCKER_TAGS=$(for i in $DOCKER_TAGS; do echo -n $DOCKER_REGISTRY/$(echo $i | docker_fullname_restriction) ""; done)
 
 	echo "run docker build on '${DOCKER_FILE:-Dockerfile}' from '$DOCKER_DIR' directory with version=$DOCKER_VERSION suite=$DOCKER_SUITE component=$DOCKER_COMPONENT arguments and $DOCKER_TAGS tags." | tee -a KAYNA-LOG
-	docker build --build-arg=version=$DOCKER_VERSION --build-arg=suite=$DOCKER_SUITE --build-arg=component=$DOCKER_COMPONENT $(for i in $DOCKER_TAGS; do echo -t $i; done) ${DOCKER_FILE:+-f $DOCKER_FILE} "$DOCKER_DIR" | tee -a KAYNA-LOG || exit 1
+	docker build --build-arg=version=$DOCKER_VERSION --build-arg=suite=$DOCKER_SUITE --build-arg=component=$DOCKER_COMPONENT $DOCKER_BUILD_EXTRA_ARGS $(for i in $DOCKER_TAGS; do echo -t $i; done) ${DOCKER_FILE:+-f $DOCKER_FILE} "$DOCKER_DIR" | tee -a KAYNA-LOG || exit 1
 
 	for tag in $DOCKER_TAGS; do
 	    echo "pushing $tag ..." | tee -a KAYNA-LOG
