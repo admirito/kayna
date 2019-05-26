@@ -4,7 +4,7 @@
 # Written by Mohammad Razavi <mrazavi64 at gmail dot com>
 #
 
-GITLAB_HOOKS_PATH=/opt/gitlab/embedded/service/gitlab-shell/hooks
+GITLAB_HOOKS_PATH=/opt/gitlab/embedded/service/gitaly-ruby/gitlab-shell/hooks
 
 if [ -f "$GITLAB_HOOKS_PATH/post-receive" ]; then
     ln -f -s /usr/share/kayna/gitlab-hooks/kayna-post-receive "$GITLAB_HOOKS_PATH/kayna-post-receive"
@@ -14,6 +14,6 @@ if [ -f "$GITLAB_HOOKS_PATH/post-receive" ]; then
 	ln -s "$GITLAB_HOOKS_PATH/kayna-post-receive" "$GITLAB_HOOKS_PATH/post-receive"
     fi
 else
-    echo "Could not find /opt/gitlab/embedded/service/gitlab-shell/hooks/post-receive."
+    echo "Could not find $GITLAB_HOOKS_PATH/post-receive."
     exit 1
 fi

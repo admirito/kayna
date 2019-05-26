@@ -7,7 +7,7 @@
 # Please do not edit this line:
 # KAYNA-GITLAB-PLUGIN-IDENTIFIER
 
-GITLAB_POST_RECEIVE=/opt/gitlab/embedded/service/gitlab-shell/hooks/gitlab-post-receive
+GITLAB_POST_RECEIVE=/opt/gitlab/embedded/service/gitaly-ruby/gitlab-shell/hooks/gitlab-post-receive
 PIPE=$(mktemp)
 
 [ -f /etc/kayna/gitlab-hooks.conf ] && . /etc/kayna/gitlab-hooks.conf || echo "* Kayna coudn't find gitlab-hooks.conf file. Please contact the CI administrator."

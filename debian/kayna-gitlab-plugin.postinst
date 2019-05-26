@@ -17,7 +17,7 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
-GITLAB_HOOKS_PATH=/opt/gitlab/embedded/service/gitlab-shell/hooks
+GITLAB_HOOKS_PATH=/opt/gitlab/embedded/service/gitaly-ruby/gitlab-shell/hooks/post-receive
 
 case "$1" in
     configure|triggered)
