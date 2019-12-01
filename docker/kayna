@@ -20,7 +20,7 @@ git_head_comment()
 
 git_head_abbreviated_hash()
 {
-    [ -n "$CI_BUILD_REF" ] && echo "$CI_BUILD_REF" | awk  '{ print substr($0, 1, 7); }' || git log --format=%h -n 1 | cat
+    [ -n "$CI_COMMIT_SHA" ] && echo "$CI_COMMIT_SHA" | awk  '{ print substr($0, 1, 7); }' || git log --format=%h -n 1 | cat
 }
 
 project_name()
@@ -52,6 +52,12 @@ debian_changes_files()
 {
     local changes_file="${1}"
     sed -n '/^Files:\s*$/,/^\s*$/p' "$changes_file" | sed -e '1d' | awk '{ print $5 }'
+}
+
+kayna_extend_diff_ignore()
+{
+    mkdir -p debian/source
+    echo 'extend-diff-ignore = "(^|/)(.gitlab-ci.yml|APT-UPDATE|KAYNA-LOG)$"' >> debian/source/options
 }
 
 docker_container_id()
@@ -192,7 +198,32 @@ case "$1" in
 	else
 	    echo "Kayna will not modify the debian/changelog version number." | tee -a KAYNA-LOG
 	fi
-	
+
+	echo "trying to fetch pristine-tar branch from git if exists..." | tee -a KAYNA-LOG
+	ORIG_VER=$(debian_version | sed 's/-.*//')
+	ORIG_TAR_FILE="${ORIG_TAR_FILE:-../${CI_PROJECT_NAME}_${ORIG_VER}.orig.tar.gz}"
+	ORIG_TAR_PREFIX="${ORIG_TAR_PREFIX:-${CI_PROJECT_NAME}_${ORIG_VER}/}"
+	if git fetch origin pristine-tar:pristine-tar &> /dev/null; then
+	    echo "pristine-tar branch fetched." | tee -a KAYNA-LOG
+
+	    echo "checking out ${ORIG_TAR_FILE} with pristine-tar..." | tee -a KAYNA-LOG
+	    pristine-tar checkout ${ORIG_TAR_FILE} | tee -a KAYNA-LOG || true
+
+	    kayna_extend_diff_ignore
+	else
+	    echo "pristine-tar branch doesn't exist. Kayna will skip it." | tee -a KAYNA-LOG
+	    if debian_version | grep -q -- -; then
+		ORIG_VER=$(debian_version | sed 's/-.*//')
+		echo "non-native debian version found without pristine-tar branch. Kayna will use the git source @ '$CI_COMMIT_SHA' to create the .orig tar ball with version = '$ORIG_VER'." | tee -a KAYNA-LOG
+		kayna_extend_diff_ignore
+		## git deborig don't support git submodules, so we
+		## have to use git-archive-all.sh
+		# mkdir -p .git/info || true
+		# git deborig -f "$CI_COMMIT_SHA"  | tee -a KAYNA-LOG || true
+		git-archive-all.sh --format tar.gz --prefix "$ORIG_TAR_PREFIX" --tree-ish "$CI_COMMIT_SHA" "$ORIG_TAR_FILE"
+	    fi
+	fi
+
 	if git_head_comment | grep -q "#notest\|#nocheck"; then
             DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -b -uc -us -nc | tee -a KAYNA-LOG
 	else

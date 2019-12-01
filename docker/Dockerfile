@@ -7,6 +7,7 @@ COPY dput.cf /root/dput.cf
 COPY known-dists /usr/share/lintian/vendors/kayna/main/data/changes-file/known-dists
 COPY main.profile /usr/share/lintian/profiles/kayna/main.profile
 COPY kayna.conf /etc/kayna/kayna.conf
+COPY git-archive-all.sh /usr/local/bin/
 
 RUN chmod 600 /root/.ssh/id_rsa && \
     mkdir -p /etc/update-motd.d/ && \
@@ -21,7 +22,7 @@ RUN chmod 600 /root/.ssh/id_rsa && \
     sed -i 's|/archive.ubuntu.com|/catan.archive.ubuntu.com|' /etc/apt/sources.list && \
     sed -i 's|^\s*deb-src|# deb-src|' /etc/apt/sources.list && \
     apt update && \
-    apt install -y --force-yes devscripts equivs git curl wget rsync zile ccache docker.io && \
+    apt install -y --force-yes devscripts equivs git curl wget rsync zile ccache docker.io pristine-tar && \
     ln -s /usr/bin/zile /usr/bin/emacs || true && \
     curl http://eldorado/pepero.gpg.key | apt-key add - && \
     #printf "deb http://eldorado/ xenial-testing main\n" > /etc/apt/sources.list.d/eldorado.list && \
