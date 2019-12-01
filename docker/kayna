@@ -130,6 +130,7 @@ case "$1" in
 	fi
 
 	(apt update || true) 2> >(tee -a KAYNA-LOG)
+	(apt dist-upgrade --no-install-recommends -y --allow-unauthenticated || true) 2> >(tee -a KAYNA-LOG)
         if ! DEBIAN_FRONTEND=noninteractive mk-build-deps -irt "apt --no-install-recommends -y --allow-unauthenticated" debian/control | tee -a KAYNA-LOG; then
             printf "\n==========\nOops\x21 Something bad happened\x21\nTo find El-Dorado you shall pass Catan.\nYou have to fight the barbarians to save the island.\nFollow the golden eagle to fix the problem and reach El Hombre Dorado.\nOr simpler, ask the right one.\nWho has created the whole Catan, El-Dorado and even Kayna herself?\nDidn't you still believe?\nIf yes, just send your prayers to mrazavi64 at gmail dot com.\n" | tee -a KAYNA-LOG
             exit 1
