@@ -200,7 +200,7 @@ case "$1" in
 	fi
 
 	echo "trying to fetch pristine-tar branch from git if exists..." | tee -a KAYNA-LOG
-	ORIG_VER=$(debian_version | sed 's/-.*//')
+	ORIG_VER=$(debian_version | sed -e 's/^.*://' -e 's/-[^-]*$//')
 	ORIG_TAR_FILE="${ORIG_TAR_FILE:-../${CI_PROJECT_NAME}_${ORIG_VER}.orig.tar.gz}"
 	ORIG_TAR_PREFIX="${ORIG_TAR_PREFIX:-${CI_PROJECT_NAME}_${ORIG_VER}/}"
 	if git fetch origin pristine-tar:pristine-tar &> /dev/null; then
@@ -213,7 +213,7 @@ case "$1" in
 	else
 	    echo "pristine-tar branch doesn't exist. Kayna will skip it." | tee -a KAYNA-LOG
 	    if debian_version | grep -q -- -; then
-		ORIG_VER=$(debian_version | sed 's/-.*//')
+		ORIG_VER=$(debian_version | sed -e 's/^.*://' -e 's/-[^-]*$//')
 		echo "non-native debian version found without pristine-tar branch. Kayna will use the git source @ '$CI_COMMIT_SHA' to create the .orig tar ball with version = '$ORIG_VER'." | tee -a KAYNA-LOG
 		kayna_extend_diff_ignore
 		## git deborig don't support git submodules, so we
