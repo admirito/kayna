@@ -201,8 +201,8 @@ case "$1" in
 
 	echo "trying to fetch pristine-tar branch from git if exists..." | tee -a KAYNA-LOG
 	ORIG_VER=$(debian_version | sed -e 's/^.*://' -e 's/-[^-]*$//')
-	ORIG_TAR_FILE="${ORIG_TAR_FILE:-../${CI_PROJECT_NAME}_${ORIG_VER}.orig.tar.gz}"
-	ORIG_TAR_PREFIX="${ORIG_TAR_PREFIX:-${CI_PROJECT_NAME}_${ORIG_VER}/}"
+	ORIG_TAR_FILE="${ORIG_TAR_FILE:-../$(debian_source_name)_${ORIG_VER}.orig.tar.gz}"
+	ORIG_TAR_PREFIX="${ORIG_TAR_PREFIX:-$(debian_source_name)_${ORIG_VER}/}"
 	if git fetch origin pristine-tar:pristine-tar &> /dev/null; then
 	    echo "pristine-tar branch fetched." | tee -a KAYNA-LOG
 
