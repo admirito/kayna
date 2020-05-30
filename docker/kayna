@@ -162,6 +162,8 @@ case "$1" in
 
     build)
         printf "Princess Kayna will command to build your package.\n" | tee -a KAYNA-LOG
+	dpkg-source --before-build . | tee -a KAYNA-LOG
+	fakeroot debian/rules clean | tee -a KAYNA-LOG || true
         DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -uc -us -nc --target build-indep --target build-arch --target build | tee -a KAYNA-LOG
     ;;
 
