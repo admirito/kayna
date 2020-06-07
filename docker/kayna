@@ -164,13 +164,13 @@ case "$1" in
         printf "Princess Kayna will command to build your package.\n" | tee -a KAYNA-LOG
 	dpkg-source --before-build . | tee -a KAYNA-LOG
 	fakeroot debian/rules clean | tee -a KAYNA-LOG || true
-        DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -uc -us -nc --target build-indep --target build-arch --target build | tee -a KAYNA-LOG
+        DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -uc -us -nc --target build | tee -a KAYNA-LOG
     ;;
 
     test)
         if [ -n "$(find debian/ -maxdepth 1 -name '*.debhelper.log' -print -quit)" ] || [ -e debian/debhelper-build-stamp ]; then
             if [ -e debian/debhelper-build-stamp ] || grep -q "^\s*dh_auto_build" debian/*.debhelper.log; then
-                dpkg-buildpackage -uc -us -nc --target build-indep --target build-arch --target build | tee -a >(grep "^\s*dh_auto_test" -A100000 > KAYNA-LOG)
+                dpkg-buildpackage -uc -us -nc --target build | tee -a >(grep "^\s*dh_auto_test" -A100000 > KAYNA-LOG)
             else
                 printf "Error: Kayna couldn't find dh_auto_build in the debian/*.debhelper.log file.\nDid you build the package before calling test?\n" | tee -a KAYNA-LOG
                 exit 1
@@ -226,11 +226,7 @@ case "$1" in
 	    fi
 	fi
 
-	if git_head_comment | grep -q "#notest\|#nocheck"; then
-            DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -b -uc -us -nc | tee -a KAYNA-LOG
-	else
-            dpkg-buildpackage -b -uc -us -nc | tee -a KAYNA-LOG
-	fi
+        DEB_BUILD_OPTIONS="nocheck" dpkg-buildpackage -b -uc -us -nc | tee -a KAYNA-LOG
 
 	SOURCE_PREFIX="$(debian_source_name)_$(debian_version)"
 
