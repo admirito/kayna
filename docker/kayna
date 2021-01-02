@@ -54,6 +54,26 @@ debian_changes_files()
     sed -n '/^Files:\s*$/,/^\s*$/p' "$changes_file" | sed -e '1d' | awk '{ print $5 }'
 }
 
+pin_debian_control_smaller_version_dependencies() {
+    ! [ -f debian/control ] && return
+    # loop on build-dependencies with < << <= = operators
+    (dpkg-checkbuilddeps debian/control 2>&1 | grep -oP "\S+ \([<=][<=]? .*?\)" | sed 's/(\|)//g' || true) | while read -r pkg_op_ver; do
+	pkg=$(echo $pkg_op_ver | tr -s " " | cut -d " " -f1)
+	op=$(echo $pkg_op_ver | tr -s " " | cut -d " " -f2)
+	ver=$(echo $pkg_op_ver | tr -s " " | cut -d " " -f3)
+	echo "Checking available versions for package $pkg" | tee -a KAYNA-LOG
+
+	# loop on available versions of pkg
+	apt-cache policy $pkg | grep -oP "^\s*\S+ \d+$" | sed 's/\s*\(\S*\) \S\+/\1/' | while read -r available_ver; do
+	    if dpkg --compare-versions "$available_ver" "$op" "$ver"; then
+		echo "Kayna will pin $pkg on version $available_ver" | tee -a KAYNA-LOG
+		printf "Package: $pkg\nPin: version $available_ver\nPin-Priority: 600\n" > "/etc/apt/preferences.d/pin-version-$pkg"
+		break
+	    fi
+	done
+    done
+}
+
 kayna_extend_diff_ignore()
 {
     mkdir -p debian/source
@@ -136,8 +156,11 @@ case "$1" in
 	fi
 
 	(apt update || true) 2> >(tee -a KAYNA-LOG)
+
+	pin_debian_control_smaller_version_dependencies || true
+
 	(DEBIAN_FRONTEND=noninteractive apt dist-upgrade --no-install-recommends -y --allow-unauthenticated || true) 2> >(tee -a KAYNA-LOG)
-        if ! DEBIAN_FRONTEND=noninteractive mk-build-deps -irt "apt --no-install-recommends -y --allow-unauthenticated" debian/control | tee -a KAYNA-LOG; then
+        if ! DEBIAN_FRONTEND=noninteractive mk-build-deps -irt "apt -o Debug::pkgProblemResolver=yes --no-install-recommends -y --allow-unauthenticated" debian/control | tee -a KAYNA-LOG; then
             printf "\n==========\nOops\x21 Something bad happened\x21\nTo find El-Dorado you shall pass Catan.\nYou have to fight the barbarians to save the island.\nFollow the golden eagle to fix the problem and reach El Hombre Dorado.\nOr simpler, ask the right one.\nWho has created the whole Catan, El-Dorado and even Kayna herself?\nDidn't you still believe?\nIf yes, just send your prayers to mrazavi64 at gmail dot com.\n" | tee -a KAYNA-LOG
             exit 1
         fi
