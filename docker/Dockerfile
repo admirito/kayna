@@ -7,7 +7,7 @@ COPY dput.cf /root/dput.cf
 COPY known-dists /usr/share/lintian/vendors/kayna/main/data/changes-file/known-dists
 COPY main.profile /usr/share/lintian/profiles/kayna/main.profile
 COPY kayna.conf /etc/kayna/kayna.conf
-COPY git-archive-all.sh /usr/local/bin/
+COPY docker-extra-bin/* /usr/local/bin/
 
 RUN chmod 600 /root/.ssh/id_rsa && \
     mkdir -p /etc/update-motd.d/ && \

@@ -1,3 +1,4 @@
 docker/* usr/share/kayna/docker
+docker-extra-bin var/lib/kayna/
 scripts/kayna-docker-update-image usr/bin/
 etc/kayna.conf etc/kayna/

@@ -29,6 +29,7 @@ prompt_confirm() {
 build_dir=$(mktemp -d) # --tmpdir=/var/cache/kayna/
 [ ! -d "$build_dir" ] && echo "Coudn't create temporary directory." && exit 1
 cp -r -H /usr/share/kayna/docker/* "$build_dir"
+cp -r -H /var/lib/kayna/docker-extra-bin "$build_dir"
 
 if echo "" "$@" | grep -qP '(?<!\S)-e'; then
     [ -z "$EDITOR" ] && EDITOR="$VISUAL"
