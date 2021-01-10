@@ -7,7 +7,7 @@
 # Please do not edit this line:
 # KAYNA-GITLAB-PLUGIN-IDENTIFIER
 
-GITLAB_POST_RECEIVE=/opt/gitlab/embedded/service/gitaly-ruby/gitlab-shell/hooks/gitlab-post-receive
+GITLAB_POST_RECEIVE=/opt/gitlab/embedded/service/gitaly-ruby/git-hooks/gitlab-post-receive
 PIPE=$(mktemp)
 
 [ -f /etc/kayna/gitlab-hooks.conf ] && . /etc/kayna/gitlab-hooks.conf || echo "* Kayna coudn't find gitlab-hooks.conf file. Please contact the CI administrator."
@@ -38,7 +38,12 @@ while read oldrev newrev refname; do
     fi
 done
 
-cat $PIPE | $GITLAB_POST_RECEIVE
+# we cannot simply do this in Gitlab version 13:
+#     cat $PIPE | $GITLAB_POST_RECEIVE
+#
+# Gitlab's post-receive hook expect $0 to be "post-receive", so we
+# have to:
+cat $PIPE | bash -c "$(cat $GITLAB_POST_RECEIVE)" post-receive "$@"
 EXITCODE=$?
 
 rm -f $PIPE
