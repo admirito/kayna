@@ -364,10 +364,25 @@ case "$1" in
 	    echo "pushing $tag ..." | tee -a KAYNA-LOG
 	    docker push "$tag" | tee -a KAYNA-LOG
 	done
+
+	echo $DOCKER_TAGS | tr -s ' ' '\n' > KAYNA-DOCKER-IMAGES
     ;;
 
     deploy)
-        echo "TODO: Kayna will deploy the debian packages." | tee -a KAYNA-LOG
+	if [ -f "KAYNA-DOCKER-IMAGES" ]; then
+	    DEPLOY_IMAGE=${DEPLOY_IMAGE:-$(head -n1 "KAYNA-DOCKER-IMAGES")}
+	fi
+	DEPLOY_IMAGE=${DEPLOY_IMAGE:-$CI_PROJECT_NAME:latest-unstable}
+
+	[ -n "$FORCE_DEPLOY_DOCKER_TAG" ] && DEPLOY_IMAGE=$(echo "$DEPLOY_IMAGE" | sed "s/\(.*\):.*\|\(.*\)/\1\2:${FORCE_DEPLOY_DOCKER_TAG}/")
+
+	DEPLOY_OBJECT=${DEPLOY_OBJECT:-deploy/${CI_PROJECT_NAME}}
+	DEPLOY_CONTAINER=${DEPLOY_CONTAINER:-${CI_PROJECT_NAME}}
+
+	echo "Patch ${DEPLOY_CONTAINER} container in ${DEPLOY_OBJECT} and set its image to ${DEPLOY_IMAGE}." | tee -a KAYNA-LOG
+
+        kubectl patch ${DEPLOY_OBJECT} -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"${DEPLOY_CONTAINER}\",\"image\":\"${DEPLOY_IMAGE}\"}]}}}}"
+
     ;;
 
     diagnose)
