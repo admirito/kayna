@@ -261,9 +261,13 @@ case "$1" in
 	dpkg-buildpackage -S -uc -us -tc | tee -a KAYNA-LOG
 	rm -f ../$SOURCE_PREFIX*source.changes
 
-	echo "Kayna will now update the .changes files..." | tee -a KAYNA-LOG
+	CHANGES_FILE=$(ls ../${SOURCE_PREFIX}_*.changes 2>/dev/null | head || true)
+	[ ! -f "$CHANGES_FILE" ] && CHANGES_FILE=$(ls ../${SOURCE_PREFIX}*.changes 2>/dev/null | head || true)
+	[ ! -f "$CHANGES_FILE" ] && CHANGES_FILE="../${SOURCE_PREFIX}*.changes"
+
+	echo "Kayna will now update the .changes file $CHANGES_FILE ..." | tee -a KAYNA-LOG
 	mv ../KAYNA-debian-files.backup debian/files
-	dpkg-genchanges > ../$SOURCE_PREFIX*.changes
+	dpkg-genchanges > $CHANGES_FILE
 	rm -f debian/files
 
 	mkdir -p ELDORADO
@@ -272,6 +276,11 @@ case "$1" in
 	    mv "../$file" ELDORADO/
 	done
 	find .. -maxdepth 1 -type f -a -name "$SOURCE_PREFIX*" -exec mv {} ELDORADO \;
+
+	# In case of a testing version (without ~) other unrelated
+	# files with ~ (probably from a previous unfinished pipeline)
+	# from gitlab cache must be deleted
+	rm -f ELDORADO/${SOURCE_PREFIX}~*
 
 	if ! git_head_comment | grep -q "#fast"; then
 	    if test -n "$(find ELDORADO -maxdepth 1 -name '*.changes' -print -quit)"; then
