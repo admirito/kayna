@@ -22,7 +22,7 @@ RUN chmod 600 /root/.ssh/id_rsa && \
     sed -i 's|/archive.ubuntu.com|/catan.archive.ubuntu.com|' /etc/apt/sources.list && \
     sed -i 's|^\s*deb-src|# deb-src|' /etc/apt/sources.list && \
     apt update && \
-    DEBIAN_FRONTEND=noninteractive apt install -y --force-yes devscripts equivs git curl wget rsync zile ccache docker.io pristine-tar && \
+    DEBIAN_FRONTEND=noninteractive apt install -y --force-yes devscripts equivs git curl wget rsync zile ccache docker.io pristine-tar quilt && \
     ln -s /usr/bin/zile /usr/bin/emacs || true && \
     curl http://eldorado/pepero.gpg.key | apt-key add - && \
     #printf "deb http://eldorado/ xenial-testing main\n" > /etc/apt/sources.list.d/eldorado.list && \
