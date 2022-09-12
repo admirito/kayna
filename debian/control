@@ -37,7 +37,7 @@ Description: tools to setup debian packaging with GitLab CI
 Package: kayna-host-agent
 Architecture: any
 Pre-Depends: adduser (>= 3.11), openssl
-Depends: ${shlibs:Depends}, ${misc:Depends}, python (>= 2.7.1), python (<< 2.8)
+Depends: ${shlibs:Depends}, ${misc:Depends}, python (>= 2.7.1) | python2, python (<< 2.8) | python2
 Description: tools to setup debian packaging with GitLab CI
  GitLab Continuous Integration (CI) is part of the GitLab project to build,
  test and deploy the developing system while pushing the source code to the
@@ -51,7 +51,7 @@ Description: tools to setup debian packaging with GitLab CI
 
 Package: kayna-triggers
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, python (>= 2.7.1), python (<< 2.8)
+Depends: ${shlibs:Depends}, ${misc:Depends}, python (>= 2.7.1) | python2, python (<< 2.8) | python2
 Description: tools to setup debian packaging with GitLab CI
  GitLab Continuous Integration (CI) is part of the GitLab project to build,
  test and deploy the developing system while pushing the source code to the

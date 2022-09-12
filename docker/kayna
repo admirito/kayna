@@ -82,7 +82,9 @@ kayna_extend_diff_ignore()
 
 docker_container_id()
 {
-    awk -F'[:/]' '(($4 == "docker") && (lastId != $NF)) { lastId = $NF; print $NF; }' /proc/self/cgroup
+    ## https://stackoverflow.com/questions/68816329/how-to-get-docker-container-id-from-within-the-container-with-cgroup-v2
+    # awk -F'[:/]' '(($4 == "docker") && (lastId != $NF)) { lastId = $NF; print $NF; }' /proc/self/cgroup
+    grep "/containers/" /proc/self/mountinfo | head -n1 | sed 's|.*/containers/\([^/]*\)/.*|\1|'
 }
 
 docker_tag_restriction()
